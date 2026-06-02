@@ -381,29 +381,33 @@ export default function AdminDashboard({
     : 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
       {/* Top Banner */}
-      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center font-bold text-white shadow-lg shadow-violet-900/30">
-            LF
+      <header className="border-b border-zinc-800/80 bg-zinc-950/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3.5">
+          {/* Sleek brand icon matching login screen */}
+          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800/80 flex items-center justify-center font-black text-white shadow-inner select-none">
+            L<span className="text-indigo-500">.</span>
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-wide bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
-              LeadFlow CRM
-            </h1>
-            <p className="text-xs text-slate-400">Admin Workspace Panel</p>
+            <div className="flex items-end gap-0.5">
+              <h1 className="text-sm font-black tracking-[0.2em] text-white leading-none">
+                LEADFLOW
+              </h1>
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mb-0.5"></span>
+            </div>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mt-1.5">Admin Workspace Panel</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold">{adminUser.name}</p>
-            <p className="text-[10px] uppercase font-bold text-violet-400 tracking-wider">Super Administrator</p>
+            <p className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">Super Administrator</p>
           </div>
 
           <button
             onClick={onSwitchToTelecallerSimulator}
-            className="flex items-center gap-2 py-2 px-3 bg-violet-950/40 hover:bg-violet-950 border border-violet-900 hover:border-violet-700 text-violet-300 hover:text-white rounded-lg text-xs font-bold transition"
+            className="flex items-center gap-2 py-2 px-3 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 text-zinc-350 hover:text-white rounded-lg text-xs font-bold transition shadow-sm"
           >
             <Smartphone size={14} />
             <span>Caller Simulator</span>
@@ -411,7 +415,7 @@ export default function AdminDashboard({
 
           <button
             onClick={onLogout}
-            className="p-2 bg-slate-800/80 hover:bg-red-500/10 border border-slate-700/80 hover:border-red-500/30 text-slate-300 hover:text-red-400 rounded-lg transition"
+            className="p-2 bg-zinc-900 hover:bg-red-500/10 border border-zinc-800 hover:border-red-500/30 text-zinc-400 hover:text-red-450 rounded-lg transition shadow-sm"
             title="Log Out"
           >
             <LogOut size={16} />

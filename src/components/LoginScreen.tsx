@@ -138,33 +138,40 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden px-4">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950 relative overflow-hidden px-4">
       {/* Decorative glowing blobs */}
-      <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-violet-600/20 rounded-full blur-[100px] pointer-events-none"></div>
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-indigo-650/10 rounded-full blur-[100px] pointer-events-none"></div>
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-violet-650/5 rounded-full blur-[120px] pointer-events-none"></div>
 
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl relative">
-        <div className="text-center mb-6">
-          <div className="inline-flex p-3 bg-violet-500/10 rounded-2xl border border-violet-500/20 text-violet-400 mb-4">
-            <Sparkles size={28} />
+      <div className="w-full max-w-md bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 rounded-3xl p-8 shadow-2xl relative">
+        <div className="text-center mb-8">
+          {/* Sleek Brand Logo Icon */}
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-white mb-5 shadow-inner select-none">
+            <span className="text-2xl font-black tracking-tighter">L<span className="text-indigo-500">.</span></span>
           </div>
-          <h1 className="text-3xl font-black bg-gradient-to-r from-violet-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent">
-            LeadFlow CRM
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">Unified Admin & Caller Workspace</p>
+          {/* Sleek Text Logo */}
+          <div className="flex items-end justify-center gap-1">
+            <h1 className="text-3xl font-black text-white tracking-[0.2em] translate-x-[0.1em] select-none">
+              LEADFLOW
+            </h1>
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mb-2 animate-pulse"></span>
+          </div>
+          <p className="text-zinc-500 text-xs uppercase font-bold tracking-[0.15em] mt-3">
+            Unified Admin & Caller Workspace
+          </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-slate-800 mb-6">
+        <div className="flex border-b border-zinc-800 mb-6">
           <button
             onClick={() => { setIsRegister(false); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 pb-3 text-sm font-bold transition-colors ${!isRegister ? 'text-violet-400 border-b-2 border-violet-500' : 'text-slate-500 hover:text-slate-300'}`}
+            className={`flex-1 pb-3 text-sm font-bold transition-colors ${!isRegister ? 'text-white border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Sign In
           </button>
           <button
             onClick={() => { setIsRegister(true); setErrorMsg(''); setSuccessMsg(''); }}
-            className={`flex-1 pb-3 text-sm font-bold transition-colors ${isRegister ? 'text-violet-400 border-b-2 border-violet-500' : 'text-slate-500 hover:text-slate-300'}`}
+            className={`flex-1 pb-3 text-sm font-bold transition-colors ${isRegister ? 'text-white border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Register Account
           </button>
@@ -189,11 +196,11 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           // LOGIN FORM
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
                 Staff Email Address
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
                   <Mail size={18} />
                 </span>
                 <input
@@ -202,17 +209,17 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950/80 border border-slate-800 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-slate-100 placeholder-slate-600 outline-none text-sm transition"
+                  className="w-full pl-11 pr-4 py-3 bg-zinc-950/80 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 placeholder-zinc-650 outline-none text-sm transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
                 Password
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
                   <KeyRound size={18} />
                 </span>
                 <input
@@ -221,7 +228,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950/80 border border-slate-800 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-slate-100 placeholder-slate-600 outline-none text-sm transition"
+                  className="w-full pl-11 pr-4 py-3 bg-zinc-950/80 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 placeholder-zinc-650 outline-none text-sm transition"
                 />
               </div>
             </div>
@@ -229,7 +236,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold rounded-xl text-sm transition shadow-lg shadow-violet-900/20 disabled:opacity-50 flex justify-center items-center"
+              className="w-full py-3.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black rounded-xl text-sm transition shadow-lg shadow-black/30 disabled:opacity-50 flex justify-center items-center select-none"
             >
               {isLoading ? 'Authenticating...' : 'Sign In to Workspace'}
             </button>
@@ -238,11 +245,11 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           // REGISTER FORM
           <form onSubmit={handleRegister} className="space-y-5">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
                 Full Name
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
                   <User size={18} />
                 </span>
                 <input
@@ -251,17 +258,17 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   placeholder="John Doe"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950/80 border border-slate-800 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-slate-100 placeholder-slate-600 outline-none text-sm transition"
+                  className="w-full pl-11 pr-4 py-3 bg-zinc-950/80 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 placeholder-zinc-650 outline-none text-sm transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
                   <Mail size={18} />
                 </span>
                 <input
@@ -270,17 +277,17 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950/80 border border-slate-800 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-slate-100 placeholder-slate-600 outline-none text-sm transition"
+                  className="w-full pl-11 pr-4 py-3 bg-zinc-950/80 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 placeholder-zinc-650 outline-none text-sm transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
                 Password
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
                   <KeyRound size={18} />
                 </span>
                 <input
@@ -289,51 +296,51 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   placeholder="Min 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950/80 border border-slate-800 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-slate-100 placeholder-slate-600 outline-none text-sm transition"
+                  className="w-full pl-11 pr-4 py-3 bg-zinc-950/80 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 placeholder-zinc-650 outline-none text-sm transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
                 Workspace Role
               </label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as any)}
-                className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-slate-100 outline-none text-sm transition"
+                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 outline-none text-sm transition"
               >
                 <option value="admin">Administrator Dashboard</option>
-                <option value="telecaller">Telecaller (Kalling Agent)</option>
+                <option value="telecaller">Telecaller (Calling Agent)</option>
               </select>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold rounded-xl text-sm transition shadow-lg shadow-violet-900/20 disabled:opacity-50 flex justify-center items-center"
+              className="w-full py-3.5 bg-white hover:bg-zinc-100 text-zinc-950 font-black rounded-xl text-sm transition shadow-lg shadow-black/30 disabled:opacity-50 flex justify-center items-center select-none"
             >
               {isLoading ? 'Creating Account...' : 'Register & Enter Workspace'}
             </button>
           </form>
         )}
 
-        <div className="mt-8 pt-6 border-t border-slate-800/80">
-          <div className="text-center text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
+        <div className="mt-8 pt-6 border-t border-zinc-800/80">
+          <div className="text-center text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4">
             Sandbox Demo Accounts
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleDemoLogin('admin')}
               disabled={isLoading}
-              className="py-2.5 px-4 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 rounded-xl text-xs text-slate-300 font-medium transition"
+              className="py-2.5 px-4 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900 rounded-xl text-xs text-zinc-300 font-bold tracking-wide transition shadow-sm"
             >
               Demo Admin
             </button>
             <button
               onClick={() => handleDemoLogin('telecaller')}
               disabled={isLoading}
-              className="py-2.5 px-4 bg-slate-950 border border-slate-800 hover:border-slate-700 hover:bg-slate-900 rounded-xl text-xs text-slate-300 font-medium transition"
+              className="py-2.5 px-4 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900 rounded-xl text-xs text-zinc-300 font-bold tracking-wide transition shadow-sm"
             >
               Demo Telecaller
             </button>

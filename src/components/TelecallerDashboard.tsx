@@ -127,25 +127,29 @@ export default function TelecallerDashboard({
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-[40px] shadow-2xl overflow-hidden flex flex-col h-[780px] relative">
         
         {/* Notch overlay */}
-        <div className="w-full bg-slate-950 h-7 flex justify-center items-center relative">
-          <div className="w-32 h-4 bg-slate-900 rounded-b-xl absolute top-0"></div>
+        <div className="w-full bg-zinc-950 h-7 flex justify-center items-center relative">
+          <div className="w-32 h-4 bg-zinc-900 rounded-b-xl absolute top-0"></div>
         </div>
 
         {/* Top Header */}
-        <div className="px-5 py-4 border-b border-slate-800/80 bg-slate-900 flex justify-between items-center">
-          <div className="flex items-center gap-2">
+        <div className="px-5 py-4 border-b border-zinc-800/80 bg-zinc-900/40 flex justify-between items-center">
+          <div className="flex items-center gap-2.5">
             {isAdminSimulation && onBackToAdmin && (
               <button 
                 onClick={onBackToAdmin}
-                className="p-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-300"
+                className="p-1.5 bg-zinc-800 border border-zinc-700 hover:border-zinc-650 rounded-lg text-zinc-300 hover:text-white transition"
                 title="Back to Admin"
               >
                 <ArrowLeft size={16} />
               </button>
             )}
             <div>
-              <p className="text-[10px] text-slate-500 uppercase font-black tracking-wider">Telecaller Console</p>
-              <h2 className="text-sm font-bold text-slate-200 truncate max-w-[150px]">{callerUser.name}</h2>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-white font-black tracking-[0.15em] select-none">LEADFLOW</span>
+                <span className="w-1 h-1 rounded-full bg-indigo-500"></span>
+                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider ml-1">Console</span>
+              </div>
+              <h2 className="text-xs font-bold text-zinc-300 mt-0.5 truncate max-w-[150px]">{callerUser.name}</h2>
             </div>
           </div>
 
