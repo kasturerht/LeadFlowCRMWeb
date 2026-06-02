@@ -19,6 +19,7 @@ export interface Lead {
   assignedTo: string | null; // UID of telecaller
   updatedAt?: string;
   label?: string;
+  followUpDate?: string | null;
 }
 
 export interface Interaction {

@@ -28,6 +28,8 @@ export default function TelecallerDashboard({
   const [showPopup, setShowPopup] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<'Converted' | 'Warm' | 'Not Interested' | 'Busy' | 'Ringing' | 'Cold'>('Warm');
   const [remarkNotes, setRemarkNotes] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followupSubFilter, setFollowupSubFilter] = useState<'due' | 'future'>('due');
   const [isSaving, setIsSaving] = useState(false);
   const [filterType, setFilterType] = useState<'pending' | 'converted' | 'followup'>('pending');
 
@@ -41,11 +43,16 @@ export default function TelecallerDashboard({
   }, [callerUser.uid]);
 
   // Filter lists
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
   const filteredLeads = leads.filter(lead => {
     if (filterType === 'pending') {
       return lead.status !== 'Converted' && lead.status !== 'Not Interested' && lead.status !== 'Warm';
     } else if (filterType === 'followup') {
-      return lead.status === 'Warm';
+      if (followupSubFilter === 'due') {
+        return lead.status === 'Warm' && (!lead.followUpDate || lead.followUpDate <= todayStr);
+      } else {
+        return lead.status === 'Warm' && !!lead.followUpDate && lead.followUpDate > todayStr;
+      }
     } else {
       return lead.status === 'Converted';
     }
@@ -63,6 +70,7 @@ export default function TelecallerDashboard({
     setSelectedLead(lead);
     setSelectedStatus(lead.status === 'New' ? 'Warm' : lead.status as any);
     setRemarkNotes('');
+    setFollowUpDate(lead.followUpDate || '');
     setShowPopup(true);
   };
 
@@ -74,11 +82,19 @@ export default function TelecallerDashboard({
       const leadDocRef = doc(db, 'leads', selectedLead.id);
       
       // Update Lead Status
-      await updateDoc(leadDocRef, {
+      const updatePayload: any = {
         status: selectedStatus,
         notes: remarkNotes,
         updatedAt: new Date().toISOString()
-      });
+      };
+
+      if (selectedStatus === 'Warm') {
+        updatePayload.followUpDate = followUpDate || null;
+      } else {
+        updatePayload.followUpDate = null;
+      }
+
+      await updateDoc(leadDocRef, updatePayload);
 
       // Create interaction document log
       const logId = 'i-' + Math.random().toString(36).substring(2, 8);
@@ -106,6 +122,7 @@ export default function TelecallerDashboard({
       setShowPopup(false);
       setSelectedLead(null);
       setRemarkNotes('');
+      setFollowUpDate('');
     } catch (err: any) {
       alert("Failed to save call disposition: " + err.message);
     } finally {
@@ -186,6 +203,31 @@ export default function TelecallerDashboard({
 
         {/* Dynamic list Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/20">
+          {filterType === 'followup' && (
+            <div className="flex gap-1.5 mb-2 bg-zinc-950/40 p-1 border border-zinc-800/80 rounded-xl">
+              <button
+                onClick={() => setFollowupSubFilter('due')}
+                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${
+                  followupSubFilter === 'due'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                Due Today ({leads.filter(l => l.status === 'Warm' && (!l.followUpDate || l.followUpDate <= todayStr)).length})
+              </button>
+              <button
+                onClick={() => setFollowupSubFilter('future')}
+                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition ${
+                  followupSubFilter === 'future'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                Upcoming ({leads.filter(l => l.status === 'Warm' && !!l.followUpDate && l.followUpDate > todayStr).length})
+              </button>
+            </div>
+          )}
+
           {filteredLeads.length === 0 ? (
             <div className="text-center py-12">
               <span className="text-3xl">☕</span>
@@ -216,6 +258,14 @@ export default function TelecallerDashboard({
                     <p className="text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-850 text-ellipsis line-clamp-2 mb-3">
                       Note: {lead.notes}
                     </p>
+                  )}
+
+                  {lead.followUpDate && (
+                    <div className="flex items-center gap-1 mb-3 select-none">
+                      <span className="text-[10px] font-bold flex items-center gap-1" style={{ color: lead.followUpDate <= todayStr ? '#FF9500' : '#6366F1' }}>
+                        📅 Callback: {lead.followUpDate}
+                      </span>
+                    </div>
                   )}
 
                   <div className="flex gap-2">
@@ -291,6 +341,22 @@ export default function TelecallerDashboard({
                 </div>
               </div>
 
+              {selectedStatus === 'Warm' && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    📅 Follow-up Date (रिमाइंडर तारीख):
+                  </label>
+                  <input
+                    type="date"
+                    min={new Date().toLocaleDateString('en-CA')}
+                    value={followUpDate}
+                    onChange={(e) => setFollowUpDate(e.target.value)}
+                    className="w-full p-3 bg-slate-950 border border-slate-800 focus:border-violet-500 rounded-xl outline-none text-xs text-slate-300 transition"
+                    required
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   3. Conversation Notes:
@@ -309,6 +375,7 @@ export default function TelecallerDashboard({
                   onClick={() => {
                     setShowPopup(false);
                     setSelectedLead(null);
+                    setFollowUpDate('');
                   }}
                   className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 font-bold text-xs rounded-xl border border-slate-700 transition"
                 >
