@@ -1499,6 +1499,74 @@ export default function AdminDashboard({
             });
             const sortedDates = Object.keys(activityByDate).sort((a, b) => b.localeCompare(a)).slice(0, 10);
 
+            // Detailed daily activity performance summary grouping
+            const dailyPerformance: {
+              [dateStr: string]: {
+                calls: number;
+                leadsCalled: Set<string>;
+                conversions: number;
+                callbacks: number;
+                callers: Set<string>;
+                totalDuration: number;
+              }
+            } = {};
+
+            filteredReportInteractions.forEach(item => {
+              if (item.timestamp) {
+                const d = new Date(item.timestamp);
+                if (!isNaN(d.getTime())) {
+                  const datePart = d.toLocaleDateString('en-CA'); // YYYY-MM-DD local format
+                  if (!dailyPerformance[datePart]) {
+                    dailyPerformance[datePart] = {
+                      calls: 0,
+                      leadsCalled: new Set(),
+                      conversions: 0,
+                      callbacks: 0,
+                      callers: new Set(),
+                      totalDuration: 0
+                    };
+                  }
+                  const day = dailyPerformance[datePart];
+                  day.calls++;
+                  if (item.leadId) day.leadsCalled.add(item.leadId);
+                  if (item.callerId) day.callers.add(item.callerId);
+                  if (item.statusAfter === 'Converted') day.conversions++;
+                  if (item.statusAfter === 'Warm') day.callbacks++;
+                  day.totalDuration += (item.duration || 0);
+                }
+              }
+            });
+            const sortedPerformanceDates = Object.keys(dailyPerformance).sort((a, b) => b.localeCompare(a));
+
+            // Future follow-up pipeline agenda grouping
+            const upcomingFollowups: {
+              [dateStr: string]: {
+                leads: Lead[];
+                byCaller: { [callerName: string]: number };
+              }
+            } = {};
+
+            leads.forEach(lead => {
+              if (lead.status === 'Warm' && lead.followUpDate) {
+                const datePart = lead.followUpDate; // YYYY-MM-DD
+                if (!upcomingFollowups[datePart]) {
+                  upcomingFollowups[datePart] = {
+                    leads: [],
+                    byCaller: {}
+                  };
+                }
+                upcomingFollowups[datePart].leads.push(lead);
+                
+                let callerName = 'Unassigned';
+                if (lead.assignedTo) {
+                  const caller = telecallers.find(t => t.uid === lead.assignedTo);
+                  if (caller) callerName = caller.name;
+                }
+                upcomingFollowups[datePart].byCaller[callerName] = (upcomingFollowups[datePart].byCaller[callerName] || 0) + 1;
+              }
+            });
+            const sortedFollowupDates = Object.keys(upcomingFollowups).sort((a, b) => a.localeCompare(b));
+
             // Group status distribution stats
             const statusStats = [
               { status: 'New', color: 'bg-violet-500', barBg: 'bg-violet-950/30', border: 'border-violet-900/30', text: 'text-violet-400' },
@@ -1733,6 +1801,125 @@ export default function AdminDashboard({
                                   {scalePct > 15 && <span className="text-[9px] font-bold text-white whitespace-nowrap">{count} calls</span>}
                                 </div>
                                 {scalePct <= 15 && <span className="text-[9px] font-bold text-slate-400 ml-2 whitespace-nowrap">{count} calls</span>}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Daily Activity Performance Log & Upcoming Callbacks Agenda */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Daily Activity Performance Log Table */}
+                  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl lg:col-span-2 space-y-4 shadow-md group hover:border-slate-700/80 transition-all duration-300">
+                    <div>
+                      <h3 className="text-sm font-bold flex items-center gap-2 text-slate-200">
+                        <Activity className="text-violet-400" size={16} />
+                        <span>Daily Activity Performance Log</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Granular day-by-day analysis of call volumes, unique leads, agent coverage, and conversions</p>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-800/80 rounded-xl bg-slate-950/40">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold tracking-wider bg-slate-950/80">
+                            <th className="p-3">Date</th>
+                            <th className="p-3 text-center">Calls</th>
+                            <th className="p-3 text-center">Unique Leads</th>
+                            <th className="p-3 text-center">Conversions</th>
+                            <th className="p-3 text-center">Reminders</th>
+                            <th className="p-3 text-center">Agents</th>
+                            <th className="p-3 text-right">Avg Talktime</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-900">
+                          {sortedPerformanceDates.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="p-6 text-center text-slate-500">
+                                No activity log records for the selected filters.
+                              </td>
+                            </tr>
+                          ) : (
+                            sortedPerformanceDates.slice(0, 10).map(dt => {
+                              const day = dailyPerformance[dt];
+                              const avgSec = day.calls > 0 ? Math.round(day.totalDuration / day.calls) : 0;
+                              return (
+                                <tr key={dt} className="hover:bg-slate-900/20 transition text-slate-300">
+                                  <td className="p-3 font-mono font-semibold text-slate-200">
+                                    {new Date(dt + 'T00:00:00').toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}
+                                  </td>
+                                  <td className="p-3 text-center font-mono font-bold text-cyan-400">{day.calls}</td>
+                                  <td className="p-3 text-center font-mono text-slate-400">{day.leadsCalled.size}</td>
+                                  <td className="p-3 text-center font-mono text-emerald-400">+{day.conversions}</td>
+                                  <td className="p-3 text-center font-mono text-amber-400">{day.callbacks}</td>
+                                  <td className="p-3 text-center font-mono text-violet-400">{day.callers.size}</td>
+                                  <td className="p-3 text-right font-mono font-semibold text-slate-400">{avgSec}s</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Upcoming Callbacks Agenda */}
+                  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4 shadow-md group hover:border-slate-700/80 transition-all duration-300 flex flex-col">
+                    <div>
+                      <h3 className="text-sm font-bold flex items-center gap-2 text-slate-200">
+                        <Calendar className="text-amber-400" size={16} />
+                        <span>Upcoming Callbacks Agenda</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Chronological calendar of future Warm follow-up calls</p>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto max-h-[320px] space-y-4 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+                      {sortedFollowupDates.length === 0 ? (
+                        <div className="h-full min-h-[180px] flex flex-col justify-center items-center text-slate-550 border border-dashed border-slate-800 rounded-xl p-4">
+                          <Calendar size={24} className="text-slate-700 mb-2" />
+                          <p className="text-xs">No upcoming followups scheduled.</p>
+                          <p className="text-[10px] text-slate-600 text-center mt-1">Telecallers will see client-requested callback dates here once they set reminder dates.</p>
+                        </div>
+                      ) : (
+                        sortedFollowupDates.map(dt => {
+                          const group = upcomingFollowups[dt];
+                          return (
+                            <div key={dt} className="space-y-2 border-l-2 border-amber-500/30 pl-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-black text-amber-500 uppercase tracking-wider">
+                                  {new Date(dt + 'T00:00:00').toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}
+                                </span>
+                                <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-bold">
+                                  {group.leads.length} calls
+                                </span>
+                              </div>
+                              <div className="space-y-1.5">
+                                {group.leads.map(lead => {
+                                  const caller = telecallers.find(t => t.uid === lead.assignedTo);
+                                  return (
+                                    <div key={lead.id} className="p-2 bg-slate-950/60 rounded-lg border border-slate-850 hover:border-slate-800 transition text-[11px] space-y-1">
+                                      <div className="flex justify-between items-start">
+                                        <span className="font-bold text-slate-200">{lead.name}</span>
+                                        <span className="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-400">{lead.label || 'General'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[9px] text-slate-500">
+                                        <PhoneCall size={10} className="shrink-0" />
+                                        <span>{lead.phone}</span>
+                                        <span className="text-slate-700">•</span>
+                                        <Users size={10} className="shrink-0" />
+                                        <span className="truncate">{caller?.name || 'Unassigned'}</span>
+                                      </div>
+                                      {lead.notes && (
+                                        <p className="text-[10px] text-slate-400 italic line-clamp-1 border-t border-slate-900 pt-1 mt-1">
+                                          "{lead.notes}"
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           );
