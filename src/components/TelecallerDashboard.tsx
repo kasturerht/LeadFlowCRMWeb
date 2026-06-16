@@ -7,7 +7,9 @@ import {
   ArrowLeft, 
   LogOut, 
   Phone, 
-  Sparkles 
+  Sparkles,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface TelecallerDashboardProps {
@@ -15,13 +17,17 @@ interface TelecallerDashboardProps {
   onLogout: () => void;
   onBackToAdmin?: () => void; // Optional if admin simulated it
   isAdminSimulation?: boolean;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
 export default function TelecallerDashboard({ 
   callerUser, 
   onLogout, 
   onBackToAdmin,
-  isAdminSimulation = false 
+  isAdminSimulation = false,
+  theme,
+  toggleTheme
 }: TelecallerDashboardProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -170,13 +176,24 @@ export default function TelecallerDashboard({
             </div>
           </div>
 
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-1 text-xs font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-lg px-2.5 py-1.5 transition"
-          >
-            <LogOut size={12} />
-            <span>Exit</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-1.5 bg-zinc-800 border border-zinc-700 hover:border-zinc-650 rounded-lg text-zinc-400 hover:text-white transition flex items-center justify-center"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? <Sun size={12} className="animate-spin-slow" /> : <Moon size={12} />}
+            </button>
+
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1 text-xs font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-lg px-2.5 py-1.5 transition"
+            >
+              <LogOut size={12} />
+              <span>Exit</span>
+            </button>
+          </div>
         </div>
 
         {/* Grid filter buttons */}

@@ -16,6 +16,22 @@ export default function App() {
   // Simulation switcher (Admin can simulate telecaller view)
   const [simulateTelecaller, setSimulateTelecaller] = useState(false);
 
+  // Theme Management (Default is dark mode)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('leadflow-theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('leadflow-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -78,7 +94,9 @@ export default function App() {
       <LoginScreen 
         onLoginSuccess={(profile) => {
           setCurrentUser(profile);
-        }} 
+        }}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }
@@ -99,6 +117,8 @@ export default function App() {
         onLogout={handleLogout}
         isAdminSimulation={true}
         onBackToAdmin={() => setSimulateTelecaller(false)}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }
@@ -110,6 +130,8 @@ export default function App() {
         adminUser={currentUser}
         onLogout={handleLogout}
         onSwitchToTelecallerSimulator={() => setSimulateTelecaller(true)}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }
@@ -141,6 +163,8 @@ export default function App() {
         callerUser={currentUser}
         onLogout={handleLogout}
         isAdminSimulation={false}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }

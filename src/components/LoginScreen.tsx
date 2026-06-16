@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { KeyRound, Mail, ShieldAlert, Sparkles, User } from 'lucide-react';
+import { KeyRound, Mail, ShieldAlert, Sparkles, User, Sun, Moon } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
-export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+export default function LoginScreen({ onLoginSuccess, theme, toggleTheme }: LoginScreenProps) {
   const [isRegister, setIsRegister] = useState(false);
   
   // Login / Register states
@@ -139,6 +141,21 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 relative overflow-hidden px-4">
+      {/* Floating Theme Switcher Button */}
+      <div className="absolute top-6 right-6 z-50">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all duration-300 flex items-center justify-center shadow-lg relative group overflow-hidden"
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {theme === 'dark' ? (
+            <Sun size={18} className="animate-spin-slow transition-transform" />
+          ) : (
+            <Moon size={18} className="transition-transform" />
+          )}
+        </button>
+      </div>
       {/* Decorative glowing blobs */}
       <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-indigo-650/10 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-violet-650/5 rounded-full blur-[120px] pointer-events-none"></div>

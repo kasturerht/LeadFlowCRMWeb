@@ -2,8 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Dark mode default colors (RGB format) */
+  --color-slate-950: 2 6 23;      /* #020617 */
+  --color-slate-900: 15 23 42;    /* #0f172a */
+  --color-slate-850: 23 37 84;    /* #172554 */
+  --color-slate-800: 30 41 59;    /* #1e293b */
+  --color-slate-750: 51 65 85;    /* Custom middle-slate */
+  --color-slate-700: 71 85 105;   /* #475569 */
+  --color-slate-500: 100 116 139; /* #64748b */
+  --color-slate-400: 148 163 184; /* #94a3b8 */
+  --color-slate-350: 168 183 204;
+  --color-slate-300: 203 213 225; /* #cbd5e1 */
+  --color-slate-200: 226 232 240; /* #e2e8f0 */
+  --color-slate-100: 241 245 249; /* #f1f5f9 */
+
+  --color-zinc-950: 9 9 11;       /* #09090b */
+  --color-zinc-900: 24 24 27;     /* #18181b */
+  --color-zinc-800: 39 39 42;     /* #27272a */
+  --color-zinc-700: 63 63 70;     /* #3f3f46 */
+  --color-zinc-500: 113 113 122;  /* #71717a */
+  --color-zinc-400: 161 161 170;  /* #a1a1aa */
+  --color-zinc-300: 212 212 216;  /* #d4d4d8 */
+  --color-zinc-200: 228 228 231;  /* #e4e4e7 */
+  --color-zinc-100: 244 244 245;  /* #f4f4f5 */
+}
+
+[data-theme="light"] {
+  /* Light mode colors (RGB format) - Inverted values */
+  --color-slate-950: 248 250 252;  /* slate-50 light background */
+  --color-slate-900: 255 255 255;  /* pure white panels */
+  --color-slate-850: 241 245 249;  /* slate-100 intermediate */
+  --color-slate-800: 226 232 240;  /* slate-200 thin borders */
+  --color-slate-750: 203 213 225;  /* slate-300 hover borders */
+  --color-slate-700: 148 163 184;  /* slate-400 text details */
+  --color-slate-500: 100 116 139;  /* slate-500 medium text */
+  --color-slate-400: 71 85 105;    /* slate-700 main text secondary */
+  --color-slate-350: 45 55 72;     /* slate-800 main text primary */
+  --color-slate-300: 30 41 59;     /* slate-800 main text */
+  --color-slate-200: 15 23 42;     /* slate-900 text */
+  --color-slate-100: 2 6 23;       /* slate-950 main text title (black) */
+
+  --color-zinc-950: 244 244 245;   /* zinc-100 light background */
+  --color-zinc-900: 255 255 255;   /* white box containers */
+  --color-zinc-800: 228 228 231;   /* zinc-200 borders */
+  --color-zinc-700: 212 212 216;   /* zinc-300 hover borders */
+  --color-zinc-500: 113 113 122;   /* zinc-500 text details */
+  --color-zinc-400: 82 82 91;      /* zinc-700 text secondary */
+  --color-zinc-300: 63 63 70;      /* zinc-800 text primary */
+  --color-zinc-200: 39 39 42;      /* zinc-800 text */
+  --color-zinc-100: 9 9 11;        /* zinc-950 text black */
+}
+
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100;
+    @apply bg-slate-950 text-slate-100 transition-colors duration-300;
   }
 }

@@ -32,19 +32,25 @@ import {
   Sparkles,
   ShieldAlert,
   Trophy,
-  Flame
+  Flame,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface AdminDashboardProps {
   adminUser: UserProfile;
   onLogout: () => void;
   onSwitchToTelecallerSimulator: () => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
 export default function AdminDashboard({ 
   adminUser, 
   onLogout, 
-  onSwitchToTelecallerSimulator 
+  onSwitchToTelecallerSimulator,
+  theme,
+  toggleTheme
 }: AdminDashboardProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [telecallers, setTelecallers] = useState<UserProfile[]>([]);
@@ -411,6 +417,15 @@ export default function AdminDashboard({
           >
             <Smartphone size={14} />
             <span>Caller Simulator</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="p-2 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white rounded-lg transition shadow-sm flex items-center justify-center"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? <Sun size={16} className="animate-spin-slow" /> : <Moon size={16} />}
           </button>
 
           <button
