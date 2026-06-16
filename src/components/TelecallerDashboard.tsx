@@ -168,7 +168,7 @@ export default function TelecallerDashboard({
             )}
             <div>
               <div className="flex items-center gap-1">
-                <span className="text-[10px] text-white font-black tracking-[0.15em] select-none">LEADFLOW</span>
+                <span className="text-[10px] text-zinc-100 font-black tracking-[0.15em] select-none">LEADFLOW</span>
                 <span className="w-1 h-1 rounded-full bg-indigo-500"></span>
                 <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider ml-1">Console</span>
               </div>

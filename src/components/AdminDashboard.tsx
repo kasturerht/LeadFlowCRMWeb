@@ -392,12 +392,12 @@ export default function AdminDashboard({
       <header className="border-b border-zinc-800/80 bg-zinc-950/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3.5">
           {/* Sleek brand icon matching login screen */}
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800/80 flex items-center justify-center font-black text-white shadow-inner select-none">
+          <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800/80 flex items-center justify-center font-black text-zinc-100 shadow-inner select-none">
             L<span className="text-indigo-500">.</span>
           </div>
           <div>
             <div className="flex items-end gap-0.5">
-              <h1 className="text-sm font-black tracking-[0.2em] text-white leading-none">
+              <h1 className="text-sm font-black tracking-[0.2em] text-slate-100 leading-none">
                 LEADFLOW
               </h1>
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mb-0.5"></span>

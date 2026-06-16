@@ -163,12 +163,12 @@ export default function LoginScreen({ onLoginSuccess, theme, toggleTheme }: Logi
       <div className="w-full max-w-md bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 rounded-3xl p-8 shadow-2xl relative">
         <div className="text-center mb-8">
           {/* Sleek Brand Logo Icon */}
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-white mb-5 shadow-inner select-none">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-100 mb-5 shadow-inner select-none">
             <span className="text-2xl font-black tracking-tighter">L<span className="text-indigo-500">.</span></span>
           </div>
           {/* Sleek Text Logo */}
           <div className="flex items-end justify-center gap-1">
-            <h1 className="text-3xl font-black text-white tracking-[0.2em] translate-x-[0.1em] select-none">
+            <h1 className="text-3xl font-black text-zinc-100 tracking-[0.2em] translate-x-[0.1em] select-none">
               LEADFLOW
             </h1>
             <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mb-2 animate-pulse"></span>
