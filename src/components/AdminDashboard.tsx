@@ -356,14 +356,17 @@ export default function AdminDashboard({
 
         const trimmed = cols.map(c => c.trim());
         let phone = '';
+        let phoneIdx = -1;
         let email = '';
+        let emailIdx = -1;
         let name = '';
+        let nameIdx = -1;
         let source = '';
+        let sourceIdx = -1;
         let notes = '';
 
-        // 1. Identify Phone (contains 10-13 digits)
-        let phoneIdx = -1;
-        for (let i = 0; i < trimmed.length; i++) {
+        // 1. Identify Phone (contains 10-13 digits) - Scan right-to-left
+        for (let i = trimmed.length - 1; i >= 0; i--) {
           const digits = trimmed[i].replace(/[^\d]/g, '');
           if (digits.length >= 10 && digits.length <= 13) {
             phone = trimmed[i];
@@ -373,7 +376,6 @@ export default function AdminDashboard({
         }
 
         // 2. Identify Email (contains '@')
-        let emailIdx = -1;
         for (let i = 0; i < trimmed.length; i++) {
           if (i === phoneIdx) continue;
           if (trimmed[i].includes('@')) {
@@ -384,7 +386,6 @@ export default function AdminDashboard({
         }
 
         // 3. Identify Source/Platform (e.g. fb, ig, facebook, instagram, google, meta)
-        let sourceIdx = -1;
         const platformKeywords = ['fb', 'ig', 'facebook', 'instagram', 'meta', 'google', 'campaign'];
         for (let i = 0; i < trimmed.length; i++) {
           if (i === phoneIdx || i === emailIdx) continue;
@@ -395,15 +396,26 @@ export default function AdminDashboard({
           }
         }
 
-        // 4. Identify Name
-        let nameIdx = -1;
-        for (let i = 0; i < trimmed.length; i++) {
-          if (i === phoneIdx || i === emailIdx || i === sourceIdx) continue;
-          if (trimmed[i].length > 0) {
-            if (name === '' || (trimmed[i].includes(' ') && !name.includes(' '))) {
-              name = trimmed[i];
-              nameIdx = i;
-            }
+        // Helper check for name candidacy
+        const isNameCandidate = (val: string): boolean => {
+          if (!val || val.length === 0) return false;
+          const lower = val.toLowerCase();
+          if (lower === 'true' || lower === 'false' || lower === 'fb' || lower === 'ig' || lower === 'facebook' || lower === 'instagram') return false;
+          if (lower.startsWith('http') || lower.includes('www.')) return false;
+          // Exclude if it is a pure number (serial, timestamp, ID) or standard scientific notation
+          if (/^\d+$/.test(val) || /^\d+\.\d+E\+\d+$/.test(val)) return false;
+          if (val.includes('|') || val.includes('_') || val.includes('/') || val.includes(':')) return false;
+          if (val.length > 35) return false;
+          return true;
+        };
+
+        // 4. Identify Name - Scan right-to-left starting from phoneIdx - 1
+        for (let i = phoneIdx - 1; i >= 0; i--) {
+          if (i === emailIdx || i === sourceIdx) continue;
+          if (isNameCandidate(trimmed[i])) {
+            name = trimmed[i];
+            nameIdx = i;
+            break;
           }
         }
 
