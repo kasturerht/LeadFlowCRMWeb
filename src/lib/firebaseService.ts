@@ -11,7 +11,7 @@ import {
   limit 
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Lead, UserProfile, Interaction, AuditLog } from '../types';
+import { Lead, UserProfile, Interaction, AuditLog, UploadBatch } from '../types';
 
 // Ingest Bulk Leads
 export async function ingestFirebaseLeads(
@@ -76,6 +76,8 @@ export async function ingestFirebaseLeads(
     return { importedCount: 0, duplicateCount };
   }
 
+  const batchId = "batch_" + Date.now();
+
   // 4. Ingest new leads in batch writes of 500 (Firestore batch limit)
   const batchWriteSize = 500;
   for (let i = 0; i < leadsToInsert.length; i += batchWriteSize) {
@@ -94,6 +96,8 @@ export async function ingestFirebaseLeads(
         assignedTo: lead.assignedTo,
         label: (lead as any).label || 'General',
         archived: false,
+        batchId: batchId,
+        uploadedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
     });
@@ -101,10 +105,20 @@ export async function ingestFirebaseLeads(
     await batch.commit();
   }
 
+  // Create batch registry record in uploadBatches collection
+  const batchLabel = (leadsToInsert[0] as any).label || 'General';
+  await setDoc(doc(db, "uploadBatches", batchId), {
+    id: batchId,
+    label: batchLabel,
+    leadCount: leadsToInsert.length,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: adminUserName
+  });
+
   // 5. Log Action
   await logFirebaseAction(
     "Bulk Upload",
-    `Imported ${leadsToInsert.length} new leads (skipped ${duplicateCount} duplicates) via Excel copy-paste.`,
+    `Imported ${leadsToInsert.length} new leads (skipped ${duplicateCount} duplicates) via Excel copy-paste. Batch ID: ${batchId}`,
     adminUserUid,
     adminUserName
   );
@@ -199,7 +213,9 @@ export function subscribeToLeads(callback: (leads: Lead[]) => void, filterUid?: 
         assignedTo: data.assignedTo || null,
         label: data.label || 'General',
         updatedAt: data.updatedAt || '',
-        archived: data.archived === true
+        archived: data.archived === true,
+        batchId: data.batchId || '',
+        uploadedAt: data.uploadedAt || ''
       });
     });
     callback(list);
@@ -353,5 +369,61 @@ export async function deleteFirebaseLeads(
     adminUserName
   );
 }
+
+// Subscribe to Upload Batches (limit 30)
+export function subscribeToUploadBatches(callback: (batches: UploadBatch[]) => void) {
+  const q = query(collection(db, "uploadBatches"), orderBy("uploadedAt", "desc"), limit(30));
+  return onSnapshot(q, (snapshot) => {
+    const list: UploadBatch[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        label: data.label || 'General',
+        leadCount: data.leadCount || 0,
+        uploadedAt: data.uploadedAt || '',
+        uploadedBy: data.uploadedBy || ''
+      });
+    });
+    callback(list);
+  });
+}
+
+// Rollback/Delete Upload Batch permanently
+export async function rollbackUploadBatch(
+  batchId: string,
+  adminUserUid: string,
+  adminUserName: string
+) {
+  // Query all leads belonging to this batch
+  const q = query(collection(db, "leads"), where("batchId", "==", batchId));
+  const snap = await getDocs(q);
+  const leadDocs = snap.docs;
+
+  // Batch delete leads in chunks of 500
+  const batchWriteSize = 500;
+  for (let i = 0; i < leadDocs.length; i += batchWriteSize) {
+    const batch = writeBatch(db);
+    const currentChunk = leadDocs.slice(i, i + batchWriteSize);
+    currentChunk.forEach(d => {
+      batch.delete(doc(db, "leads", d.id));
+    });
+    await batch.commit();
+  }
+
+  // Delete the batch registry record itself
+  const endBatch = writeBatch(db);
+  endBatch.delete(doc(db, "uploadBatches", batchId));
+  await endBatch.commit();
+
+  // Log Action
+  await logFirebaseAction(
+    "Import Rollback",
+    `Permanently deleted all ${leadDocs.length} leads from batch: ${batchId}.`,
+    adminUserUid,
+    adminUserName
+  );
+}
+
 
 

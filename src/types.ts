@@ -21,6 +21,8 @@ export interface Lead {
   label?: string;
   followUpDate?: string | null;
   archived?: boolean;
+  batchId?: string;
+  uploadedAt?: string;
 }
 
 export interface Interaction {
@@ -42,4 +44,12 @@ export interface AuditLog {
   userId: string;
   userName: string;
   timestamp: string;
+}
+
+export interface UploadBatch {
+  id: string;
+  label: string;
+  leadCount: number;
+  uploadedAt: string;
+  uploadedBy: string;
 }

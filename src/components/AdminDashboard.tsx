@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserProfile, Lead, Interaction, AuditLog } from '../types';
+import { UserProfile, Lead, Interaction, AuditLog, UploadBatch } from '../types';
 import { 
   ingestFirebaseLeads, 
   autoDistributeFirebaseLeads, 
@@ -9,7 +9,9 @@ import {
   subscribeToAuditLogs,
   bulkAssignLeads,
   archiveFirebaseLeads,
-  deleteFirebaseLeads
+  deleteFirebaseLeads,
+  subscribeToUploadBatches,
+  rollbackUploadBatch
 } from '../lib/firebaseService';
 import { doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -98,6 +100,12 @@ export default function AdminDashboard({
   // Modals visibility states for operations
   const [showIngestModal, setShowIngestModal] = useState(false);
   const [showSplitterModal, setShowSplitterModal] = useState(false);
+
+  // Batch rollback states
+  const [uploadBatches, setUploadBatches] = useState<UploadBatch[]>([]);
+  const [showBatchHistoryModal, setShowBatchHistoryModal] = useState(false);
+  const [rollbackLoadingBatchId, setRollbackLoadingBatchId] = useState<string | null>(null);
+  const [batchIdToRollbackConfirm, setBatchIdToRollbackConfirm] = useState<string | null>(null);
 
   // Reports Filters States
   const [reportDateRange, setReportDateRange] = useState<'today' | 'yesterday' | '7days' | '30days' | 'all' | 'custom'>('all');
@@ -226,6 +234,19 @@ export default function AdminDashboard({
     }
   };
 
+  const handleRollbackBatch = async (batchId: string) => {
+    setRollbackLoadingBatchId(batchId);
+    try {
+      await rollbackUploadBatch(batchId, adminUser.uid, adminUser.name);
+      flashMessage(`बॅच यशस्वीरित्या रोलबॅक (डिलीट) करण्यात आली आहे.`);
+      setBatchIdToRollbackConfirm(null);
+    } catch (err: any) {
+      flashMessage("बॅच रोलबॅक करण्यात अडथळा आला: " + err.message, true);
+    } finally {
+      setRollbackLoadingBatchId(null);
+    }
+  };
+
 
 
   const handleAddNewTelecaller = async (e: React.FormEvent) => {
@@ -295,12 +316,14 @@ export default function AdminDashboard({
     const unsubCallers = subscribeToTelecallers((list) => setTelecallers(list));
     const unsubInteractions = subscribeToAllInteractions((list) => setInteractions(list));
     const unsubLogs = subscribeToAuditLogs((list) => setAuditLogs(list));
+    const unsubBatches = subscribeToUploadBatches((list) => setUploadBatches(list));
 
     return () => {
       unsubLeads();
       unsubCallers();
       unsubInteractions();
       unsubLogs();
+      unsubBatches();
     };
   }, []);
 
@@ -1158,6 +1181,14 @@ export default function AdminDashboard({
                       <p className="text-xs text-slate-400 mt-1">
                         Viewing {displayedLeads.length} leads out of {leads.length} total database records.
                       </p>
+                    </div>
+                    <div>
+                      <button
+                        onClick={() => setShowBatchHistoryModal(true)}
+                        className="flex items-center justify-center gap-2 py-2 px-4 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-705 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition shadow-md"
+                      >
+                        📋 View Import History
+                      </button>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
@@ -2559,6 +2590,118 @@ Amit Kumar, 8887776665, amit@yahoo.com, FB Campaign, callback after 5"
                 className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-violet-900/10 flex justify-center items-center gap-2"
               >
                 {allocationLoading ? 'Splitting...' : 'Run Splitter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import History Modal */}
+      {showBatchHistoryModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="text-violet-400" size={18} />
+                <h3 className="font-bold text-md text-slate-200">Leads Import History</h3>
+              </div>
+              <button 
+                onClick={() => setShowBatchHistoryModal(false)}
+                className="p-1.5 bg-slate-850 border border-slate-800 rounded-lg text-slate-400 hover:text-slate-205 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed shrink-0">
+              येथे पूर्वी केलेल्या सर्व बल्क अपलोड्सची यादी आहे. चुकीचा डेटा अपलोड झाला असल्यास, तुम्ही <strong>"Delete Batch (Rollback)"</strong> बटणावर क्लिक करून संपूर्ण बॅच एका क्लिकवर डेटाबेसमधून काढू शकता.
+            </p>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-800">
+              {uploadBatches.length === 0 ? (
+                <div className="text-center py-12 text-slate-550 font-bold uppercase tracking-wider">
+                  कोणतीही अपलोड हिस्ट्री उपलब्ध नाही.
+                </div>
+              ) : (
+                uploadBatches.map((batch) => {
+                  const uploadDate = new Date(batch.uploadedAt);
+                  const formattedDate = uploadDate.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  }) + ' ' + uploadDate.toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+
+                  const isLoading = rollbackLoadingBatchId === batch.id;
+
+                  return (
+                    <div 
+                      key={batch.id} 
+                      className="p-4 border border-slate-800 bg-slate-950/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition animate-in fade-in duration-200"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-violet-950/40 border border-violet-800/30 rounded-lg text-violet-300 font-semibold text-[10px]">
+                            🏷️ {batch.label}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500 font-bold">
+                            {batch.id}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-205">
+                          {batch.leadCount} Leads Imported
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>📅 {formattedDate}</span>
+                          <span>•</span>
+                          <span>👤 By {batch.uploadedBy}</span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {batchIdToRollbackConfirm === batch.id ? (
+                          <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right duration-250">
+                            <span className="text-[10px] text-red-400 font-bold mr-1">नक्की डिलीट करायचे?</span>
+                            <button
+                              onClick={() => handleRollbackBatch(batch.id)}
+                              disabled={isLoading}
+                              className="py-1.5 px-3 bg-red-650 hover:bg-red-600 disabled:opacity-50 text-white font-bold rounded-lg text-[10px] transition"
+                            >
+                              {isLoading ? 'डिलिट होत आहे...' : 'हो'}
+                            </button>
+                            <button
+                              onClick={() => setBatchIdToRollbackConfirm(null)}
+                              disabled={isLoading}
+                              className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] transition"
+                            >
+                              नाही
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setBatchIdToRollbackConfirm(batch.id)}
+                            disabled={rollbackLoadingBatchId !== null}
+                            className="py-2 px-3 bg-red-950/40 hover:bg-red-950 border border-red-900 hover:border-red-700 text-red-400 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                          >
+                            <Trash2 size={12} />
+                            <span>Delete Batch (Rollback)</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="border-t border-slate-800 pt-4 flex justify-end shrink-0">
+              <button
+                onClick={() => setShowBatchHistoryModal(false)}
+                className="py-2 px-5 bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 rounded-xl text-xs transition font-semibold"
+              >
+                बंद करा (Close)
               </button>
             </div>
           </div>
