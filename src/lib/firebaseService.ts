@@ -198,7 +198,8 @@ export function subscribeToLeads(callback: (leads: Lead[]) => void, filterUid?: 
         notes: data.notes || '',
         assignedTo: data.assignedTo || null,
         label: data.label || 'General',
-        updatedAt: data.updatedAt || ''
+        updatedAt: data.updatedAt || '',
+        archived: data.archived === true
       });
     });
     callback(list);
