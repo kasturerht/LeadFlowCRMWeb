@@ -38,6 +38,7 @@ export default function TelecallerDashboard({
   const [followupSubFilter, setFollowupSubFilter] = useState<'due' | 'future'>('due');
   const [isSaving, setIsSaving] = useState(false);
   const [filterType, setFilterType] = useState<'pending' | 'converted' | 'followup'>('pending');
+  const [callStartTimestamp, setCallStartTimestamp] = useState<number | null>(null);
 
   // Load leads real-time assigned to this telecaller
   useEffect(() => {
@@ -72,6 +73,9 @@ export default function TelecallerDashboard({
     // Simulate Dial alert
     alert(`[Simulating Native Dialer]\nNumber Copied: ${cleanNum}\nWhatsApp trigger links: https://wa.me/${cleanNum.replace('+', '')}\nOpening call results form.`);
 
+    // Record call start time
+    setCallStartTimestamp(Date.now());
+
     // 2. Open result popup
     setSelectedLead(lead);
     setSelectedStatus(lead.status === 'New' ? 'Warm' : lead.status as any);
@@ -102,6 +106,13 @@ export default function TelecallerDashboard({
 
       await updateDoc(leadDocRef, updatePayload);
 
+      // Calculate real duration in seconds
+      let durationSeconds = 30; // fallback
+      if (callStartTimestamp) {
+        const diff = Math.floor((Date.now() - callStartTimestamp) / 1000);
+        durationSeconds = Math.min(Math.max(diff, 1), 3600); // Coerce between 1s and 1 hour
+      }
+
       // Create interaction document log
       const logId = 'i-' + Math.random().toString(36).substring(2, 8);
       const interactionRef = doc(db, 'interactions', logId);
@@ -114,13 +125,13 @@ export default function TelecallerDashboard({
         statusAfter: selectedStatus,
         notes: remarkNotes,
         timestamp: new Date().toISOString(),
-        duration: 30 // Dummy simulated value
+        duration: durationSeconds
       });
 
       // Save audit timeline action
       await logFirebaseAction(
         "Call Disposition",
-        `Caller ${callerUser.name} updated Lead ${selectedLead.name} status to ${selectedStatus}`,
+        `Caller ${callerUser.name} updated Lead ${selectedLead.name} status to ${selectedStatus} (Duration: ${durationSeconds}s)`,
         callerUser.uid,
         callerUser.name
       );
@@ -129,6 +140,7 @@ export default function TelecallerDashboard({
       setSelectedLead(null);
       setRemarkNotes('');
       setFollowUpDate('');
+      setCallStartTimestamp(null);
     } catch (err: any) {
       alert("Failed to save call disposition: " + err.message);
     } finally {
@@ -393,6 +405,7 @@ export default function TelecallerDashboard({
                     setShowPopup(false);
                     setSelectedLead(null);
                     setFollowUpDate('');
+                    setCallStartTimestamp(null);
                   }}
                   className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 font-bold text-xs rounded-xl border border-slate-700 transition"
                 >

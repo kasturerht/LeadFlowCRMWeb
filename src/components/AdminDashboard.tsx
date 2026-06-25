@@ -9,7 +9,7 @@ import {
   subscribeToAuditLogs,
   bulkAssignLeads
 } from '../lib/firebaseService';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
   Activity, 
@@ -100,10 +100,35 @@ export default function AdminDashboard({
   const handleToggleActiveState = async (caller: UserProfile) => {
     try {
       const userRef = doc(db, 'users', caller.uid);
+      const nextActiveState = !caller.active;
+      
       await updateDoc(userRef, {
-        active: !caller.active
+        active: nextActiveState
       });
-      flashMessage(`Telecaller ${caller.name} is now ${!caller.active ? 'Active' : 'Inactive'}.`);
+
+      if (!nextActiveState) {
+        const activeLeadsToRelease = leads.filter(lead => 
+          lead.assignedTo === caller.uid && 
+          lead.status !== 'Converted' && 
+          lead.status !== 'Not Interested'
+        );
+
+        if (activeLeadsToRelease.length > 0) {
+          const batch = writeBatch(db);
+          activeLeadsToRelease.forEach(lead => {
+            batch.update(doc(db, 'leads', lead.id), {
+              assignedTo: null,
+              updatedAt: new Date().toISOString()
+            });
+          });
+          await batch.commit();
+
+          flashMessage(`Telecaller ${caller.name} is now Inactive. Released ${activeLeadsToRelease.length} active leads back to unallocated pool.`);
+          return;
+        }
+      }
+
+      flashMessage(`Telecaller ${caller.name} is now ${nextActiveState ? 'Active' : 'Inactive'}.`);
     } catch (err: any) {
       flashMessage("Failed to update status: " + err.message, true);
     }
@@ -346,8 +371,12 @@ export default function AdminDashboard({
     }
 
     try {
-      await ingestFirebaseLeads(adminUser.uid, adminUser.name, parsedLeads);
-      flashMessage(`Successfully processed & distributed ${parsedLeads.length} leads directly in Firestore.`);
+      const { importedCount, duplicateCount } = await ingestFirebaseLeads(adminUser.uid, adminUser.name, parsedLeads);
+      if (importedCount === 0) {
+        flashMessage(`No new leads imported. Skipped ${duplicateCount} duplicate records.`, true);
+      } else {
+        flashMessage(`Successfully imported ${importedCount} new leads. Skipped ${duplicateCount} duplicate records.`, false);
+      }
       setBulkLeadInput('');
       setSelectedCallersForUpload([]);
       setBulkLeadLabel('');

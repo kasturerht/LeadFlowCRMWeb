@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { KeyRound, Mail, ShieldAlert, Sparkles, User, Sun, Moon } from 'lucide-react';
+import { KeyRound, Mail, ShieldAlert, Sparkles, User, Sun, Moon, Shield } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface LoginScreenProps {
@@ -19,6 +19,7 @@ export default function LoginScreen({ onLoginSuccess, theme, toggleTheme }: Logi
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'telecaller'>('admin');
+  const [adminPasscode, setAdminPasscode] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -70,6 +71,17 @@ export default function LoginScreen({ onLoginSuccess, theme, toggleTheme }: Logi
     if (password.length < 6) {
       setErrorMsg('Password should be at least 6 characters.');
       return;
+    }
+    if (role === 'admin') {
+      const requiredPasscode = import.meta.env.VITE_ADMIN_REGISTRATION_KEY || 'FINESSE-ADMIN-2026';
+      if (!adminPasscode.trim()) {
+        setErrorMsg('Admin Passcode is required to register as an Administrator!');
+        return;
+      }
+      if (adminPasscode.trim() !== requiredPasscode) {
+        setErrorMsg('Unauthorized Admin Passcode. Please enter the correct secret key to proceed.');
+        return;
+      }
     }
     setIsLoading(true);
     setErrorMsg('');
@@ -181,13 +193,25 @@ export default function LoginScreen({ onLoginSuccess, theme, toggleTheme }: Logi
         {/* Tab Switcher */}
         <div className="flex border-b border-zinc-800 mb-6">
           <button
-            onClick={() => { setIsRegister(false); setErrorMsg(''); setSuccessMsg(''); }}
+            onClick={() => { 
+              setIsRegister(false); 
+              setErrorMsg(''); 
+              setSuccessMsg(''); 
+              setAdminPasscode('');
+              setRole('admin');
+            }}
             className={`flex-1 pb-3 text-sm font-bold transition-colors ${!isRegister ? 'text-white border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Sign In
           </button>
           <button
-            onClick={() => { setIsRegister(true); setErrorMsg(''); setSuccessMsg(''); }}
+            onClick={() => { 
+              setIsRegister(true); 
+              setErrorMsg(''); 
+              setSuccessMsg(''); 
+              setAdminPasscode('');
+              setRole('admin');
+            }}
             className={`flex-1 pb-3 text-sm font-bold transition-colors ${isRegister ? 'text-white border-b-2 border-indigo-500' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             Register Account
@@ -324,13 +348,37 @@ export default function LoginScreen({ onLoginSuccess, theme, toggleTheme }: Logi
               </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as any)}
+                onChange={(e) => {
+                  setRole(e.target.value as any);
+                  setAdminPasscode('');
+                }}
                 className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 outline-none text-sm transition"
               >
                 <option value="admin">Administrator Dashboard</option>
                 <option value="telecaller">Telecaller (Calling Agent)</option>
               </select>
             </div>
+
+            {role === 'admin' && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                  Admin Passcode / Secret Key
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-zinc-500">
+                    <Shield size={18} />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Enter admin passcode"
+                    value={adminPasscode}
+                    onChange={(e) => setAdminPasscode(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 bg-zinc-950/80 border border-zinc-805 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-zinc-100 placeholder-zinc-650 outline-none text-sm transition rounded-xl"
+                  />
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
