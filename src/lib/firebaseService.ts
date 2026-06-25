@@ -93,6 +93,7 @@ export async function ingestFirebaseLeads(
         notes: lead.notes || 'Bulk CSV imported lead.',
         assignedTo: lead.assignedTo,
         label: (lead as any).label || 'General',
+        archived: false,
         updatedAt: new Date().toISOString()
       });
     });
@@ -297,3 +298,35 @@ export async function bulkAssignLeads(
     adminUserName
   );
 }
+
+// Bulk Archive / Unarchive Leads
+export async function archiveFirebaseLeads(
+  leadIds: string[],
+  archiveState: boolean,
+  adminUserUid: string,
+  adminUserName: string
+) {
+  const batch = writeBatch(db);
+
+  leadIds.forEach(id => {
+    batch.update(doc(db, "leads", id), {
+      archived: archiveState,
+      updatedAt: new Date().toISOString()
+    });
+  });
+
+  await batch.commit();
+
+  // Log Action
+  const details = archiveState
+    ? `Bulk archived ${leadIds.length} leads (moved to archive folder).`
+    : `Bulk unarchived ${leadIds.length} leads (restored to active roster).`;
+
+  await logFirebaseAction(
+    "Bulk Lead Archival",
+    details,
+    adminUserUid,
+    adminUserName
+  );
+}
+

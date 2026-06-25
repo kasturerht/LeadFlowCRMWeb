@@ -7,7 +7,8 @@ import {
   subscribeToTelecallers, 
   subscribeToAllInteractions, 
   subscribeToAuditLogs,
-  bulkAssignLeads
+  bulkAssignLeads,
+  archiveFirebaseLeads
 } from '../lib/firebaseService';
 import { doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -83,6 +84,12 @@ export default function AdminDashboard({
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
   const [bulkAssignTarget, setBulkAssignTarget] = useState<string>('');
+  const [bulkArchiveLoading, setBulkArchiveLoading] = useState(false);
+
+  // Leads Directory filters states
+  const [leadsDirectoryFilter, setLeadsDirectoryFilter] = useState<'active' | 'archived' | 'all'>('active');
+  const [archiveStatusFilter, setArchiveStatusFilter] = useState<string>('ALL');
+  const [archiveDateFilter, setArchiveDateFilter] = useState<'all' | '7days' | '30days' | 'older30days'>('all');
 
   // Modals visibility states for operations
   const [showIngestModal, setShowIngestModal] = useState(false);
@@ -176,6 +183,26 @@ export default function AdminDashboard({
       setBulkAssignLoading(false);
     }
   };
+
+  const handleBulkArchive = async (archiveState: boolean) => {
+    if (selectedLeadIds.length === 0) return;
+    setBulkArchiveLoading(true);
+    try {
+      await archiveFirebaseLeads(
+        selectedLeadIds,
+        archiveState,
+        adminUser.uid,
+        adminUser.name
+      );
+      flashMessage(`Successfully ${archiveState ? 'archived' : 'unarchived'} ${selectedLeadIds.length} leads.`);
+      setSelectedLeadIds([]);
+    } catch (err: any) {
+      flashMessage("Bulk archival failed: " + err.message, true);
+    } finally {
+      setBulkArchiveLoading(false);
+    }
+  };
+
 
   const handleAddNewTelecaller = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1001,119 +1028,219 @@ export default function AdminDashboard({
           )}
 
           {/* TAB 2: LEADS DIRECTORY */}
-          {activeTab === 'leads' && (
-            <>
-              <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-800/80 flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-md">Leads Directory</h3>
-                  <p className="text-xs text-slate-400 mt-1">Real-time database records list ({leads.length} total)</p>
+          {activeTab === 'leads' && (() => {
+            // Client-side filtering logic to handle dynamic archiving
+            const displayedLeads = leads.filter(lead => {
+              if (leadsDirectoryFilter === 'active') {
+                if (lead.archived === true) return false;
+              } else if (leadsDirectoryFilter === 'archived') {
+                if (lead.archived !== true) return false;
+
+                // Status Filter
+                if (archiveStatusFilter !== 'ALL' && lead.status !== archiveStatusFilter) return false;
+
+                // Date Filter
+                if (archiveDateFilter !== 'all') {
+                  if (!lead.updatedAt) return false;
+                  const updatedTime = new Date(lead.updatedAt).getTime();
+                  const now = Date.now();
+                  const diffDays = (now - updatedTime) / (1000 * 60 * 60 * 24);
+
+                  if (archiveDateFilter === '7days') {
+                    if (diffDays > 7) return false;
+                  } else if (archiveDateFilter === '30days') {
+                    if (diffDays > 30) return false;
+                  } else if (archiveDateFilter === 'older30days') {
+                    if (diffDays <= 30) return false;
+                  }
+                }
+              }
+              return true;
+            });
+
+            return (
+              <>
+                {/* Silicon Valley style Tab Switcher */}
+                <div className="flex flex-wrap gap-2 mb-4 bg-zinc-900/10 border-b border-zinc-800/80 pb-4">
+                  {[
+                    { id: 'active', label: 'Active Leads' },
+                    { id: 'archived', label: 'Archived Leads' },
+                    { id: 'all', label: 'All Database Leads' }
+                  ].map(subTab => (
+                    <button
+                      key={subTab.id}
+                      onClick={() => {
+                        setLeadsDirectoryFilter(subTab.id as any);
+                        setSelectedLeadIds([]); // reset selection on tab change
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                        leadsDirectoryFilter === subTab.id 
+                          ? 'bg-violet-600 border-transparent text-white shadow-lg shadow-violet-900/20' 
+                          : 'bg-zinc-900 hover:bg-zinc-800/80 border-zinc-800 text-slate-400'
+                      }`}
+                    >
+                      {subTab.label}
+                    </button>
+                  ))}
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold tracking-wider bg-slate-900/40">
-                      <th className="p-4 w-12 text-center">
-                        <input
-                          type="checkbox"
-                          checked={leads.length > 0 && selectedLeadIds.length === leads.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedLeadIds(leads.map(l => l.id));
-                            } else {
-                              setSelectedLeadIds([]);
-                            }
-                          }}
-                          className="rounded border-slate-700 text-violet-600 focus:ring-violet-500 bg-slate-950 h-4 w-4 cursor-pointer"
-                        />
-                      </th>
-                      <th className="p-4">Name</th>
-                      <th className="p-4">Phone</th>
-                      <th className="p-4">Source</th>
-                      <th className="p-4">Label</th>
-                      <th className="p-4">Assigned To</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4">Last Note</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {leads.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500">
-                          No leads in database. Use Bulk Upload to insert.
-                        </td>
-                      </tr>
-                    ) : (
-                      leads.map((lead) => {
-                        const assignedCaller = telecallers.find(t => t.uid === lead.assignedTo);
-                        const isSelected = selectedLeadIds.includes(lead.id);
-                        return (
-                          <tr 
-                            key={lead.id} 
-                            className={`hover:bg-slate-900/30 transition ${
-                              isSelected ? 'bg-violet-950/20 hover:bg-violet-950/25' : ''
-                            }`}
-                          >
-                            <td className="p-4 text-center">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => {
-                                  if (isSelected) {
-                                    setSelectedLeadIds(selectedLeadIds.filter(id => id !== lead.id));
-                                  } else {
-                                    setSelectedLeadIds([...selectedLeadIds, lead.id]);
-                                  }
-                                }}
-                                className="rounded border-slate-700 text-violet-600 focus:ring-violet-500 bg-slate-950 h-4 w-4 cursor-pointer"
-                              />
-                            </td>
-                            <td className="p-4 font-bold text-slate-200">{lead.name}</td>
-                            <td className="p-4 font-mono text-slate-400">{lead.phone}</td>
-                            <td className="p-4">
-                              <span className="px-2.5 py-1 bg-slate-850 border border-slate-850 rounded-lg text-slate-400 font-medium">
-                                {lead.source}
-                              </span>
-                            </td>
-                            <td className="p-4">
-                              <span className="px-2.5 py-1 bg-violet-950/40 border border-violet-800/30 rounded-lg text-violet-300 font-semibold text-[10px] flex items-center gap-1.5 w-fit">
-                                🏷️ {lead.label || 'General'}
-                              </span>
-                            </td>
-                            <td className="p-4 text-slate-300">
-                              {assignedCaller ? (
-                                <span className="font-semibold text-violet-400">👤 {assignedCaller.name}</span>
-                              ) : (
-                                <span className="text-slate-500 italic">Unassigned</span>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${
-                                lead.status === 'Converted' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                                lead.status === 'Warm' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-                                lead.status === 'Not Interested' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-                                'bg-sky-500/10 border-sky-500/20 text-sky-400'
-                              }`}>
-                                {lead.status}
-                              </span>
-                            </td>
-                            <td className="p-4 text-slate-400 max-w-xs truncate" title={lead.notes}>
-                              {lead.notes || '—'}
+
+                {/* Glassmorphic Filters for Archived Leads Tab */}
+                {leadsDirectoryFilter === 'archived' && (
+                  <div className="p-4 mb-4 bg-slate-900/40 border border-slate-800 rounded-2xl flex flex-wrap gap-4 items-center animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Archive Status</span>
+                      <select
+                        value={archiveStatusFilter}
+                        onChange={(e) => setArchiveStatusFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-violet-500 text-slate-200 cursor-pointer"
+                      >
+                        <option value="ALL">Show All Status</option>
+                        <option value="New">New</option>
+                        <option value="Warm">Warm (Follow-up)</option>
+                        <option value="Converted">Converted (Closed Deal)</option>
+                        <option value="Not Interested">Not Interested</option>
+                        <option value="Busy">Busy</option>
+                        <option value="Ringing">Ringing</option>
+                        <option value="Cold">Cold</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Archive Date Range</span>
+                      <select
+                        value={archiveDateFilter}
+                        onChange={(e) => setArchiveDateFilter(e.target.value as any)}
+                        className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-violet-500 text-slate-200 cursor-pointer"
+                      >
+                        <option value="all">All Time</option>
+                        <option value="7days">Last 7 Days</option>
+                        <option value="30days">Last 30 Days</option>
+                        <option value="older30days">Older than 30 Days</option>
+                      </select>
+                    </div>
+
+                    <div className="ml-auto text-[10px] font-mono text-slate-500 font-bold uppercase tracking-wider">
+                      Matched: {displayedLeads.length} archived leads
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
+                  <div className="px-6 py-5 border-b border-slate-800/80 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-md capitalize">
+                        {leadsDirectoryFilter} Leads Listing
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Viewing {displayedLeads.length} leads out of {leads.length} total database records.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold tracking-wider bg-slate-900/40">
+                          <th className="p-4 w-12 text-center">
+                            <input
+                              type="checkbox"
+                              checked={displayedLeads.length > 0 && selectedLeadIds.length === displayedLeads.length}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedLeadIds(displayedLeads.map(l => l.id));
+                                } else {
+                                  setSelectedLeadIds([]);
+                                }
+                              }}
+                              className="rounded border-slate-700 text-violet-600 focus:ring-violet-500 bg-slate-950 h-4 w-4 cursor-pointer"
+                            />
+                          </th>
+                          <th className="p-4">Name</th>
+                          <th className="p-4">Phone</th>
+                          <th className="p-4">Source</th>
+                          <th className="p-4">Label</th>
+                          <th className="p-4">Assigned To</th>
+                          <th className="p-4">Status</th>
+                          <th className="p-4">Last Note</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {displayedLeads.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="p-8 text-center text-slate-500 font-bold uppercase tracking-wider">
+                              No records match the active directory filter.
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        ) : (
+                          displayedLeads.map((lead) => {
+                            const assignedCaller = telecallers.find(t => t.uid === lead.assignedTo);
+                            const isSelected = selectedLeadIds.includes(lead.id);
+                            return (
+                              <tr 
+                                key={lead.id} 
+                                className={`hover:bg-slate-900/30 transition ${
+                                  isSelected ? 'bg-violet-950/20 hover:bg-violet-950/25' : ''
+                                }`}
+                              >
+                                <td className="p-4 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      if (isSelected) {
+                                        setSelectedLeadIds(selectedLeadIds.filter(id => id !== lead.id));
+                                      } else {
+                                        setSelectedLeadIds([...selectedLeadIds, lead.id]);
+                                      }
+                                    }}
+                                    className="rounded border-slate-700 text-violet-600 focus:ring-violet-500 bg-slate-950 h-4 w-4 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="p-4 font-bold text-slate-200">{lead.name}</td>
+                                <td className="p-4 font-mono text-slate-400">{lead.phone}</td>
+                                <td className="p-4">
+                                  <span className="px-2.5 py-1 bg-slate-850 border border-slate-850 rounded-lg text-slate-400 font-medium">
+                                    {lead.source}
+                                  </span>
+                                </td>
+                                <td className="p-4">
+                                  <span className="px-2.5 py-1 bg-violet-950/40 border border-violet-800/30 rounded-lg text-violet-300 font-semibold text-[10px] flex items-center gap-1.5 w-fit">
+                                    🏷️ {lead.label || 'General'}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-slate-300">
+                                  {assignedCaller ? (
+                                    <span className="font-semibold text-violet-400">👤 {assignedCaller.name}</span>
+                                  ) : (
+                                    <span className="text-slate-500 italic">Unassigned</span>
+                                  )}
+                                </td>
+                                <td className="p-4">
+                                  <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${
+                                    lead.status === 'Converted' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                                    lead.status === 'Warm' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+                                    lead.status === 'Not Interested' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                                    'bg-sky-500/10 border-sky-500/20 text-sky-400'
+                                  }`}>
+                                    {lead.status}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-slate-400 max-w-xs truncate" title={lead.notes}>
+                                  {lead.notes || '—'}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
 
             {/* Floating Glassmorphic Bulk Action Bar */}
             {selectedLeadIds.length > 0 && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl animate-in slide-in-from-bottom duration-300">
-                <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-md rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl animate-in slide-in-from-bottom duration-300">
+                <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-md rounded-2xl p-4 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white shadow-lg shadow-violet-900/40">
                       {selectedLeadIds.length}
@@ -1123,12 +1250,13 @@ export default function AdminDashboard({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    {/* Telecaller assignment dropdown, disabled for Archived tab to prevent accidental re-assignments without restoring first */}
                     <select
                       value={bulkAssignTarget}
                       onChange={(e) => setBulkAssignTarget(e.target.value)}
-                      disabled={bulkAssignLoading}
-                      className="flex-1 sm:flex-none text-xs bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-none focus:border-violet-500 text-slate-200 cursor-pointer disabled:opacity-50"
+                      disabled={bulkAssignLoading || leadsDirectoryFilter === 'archived'}
+                      className="flex-1 md:flex-none text-xs bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 outline-none focus:border-violet-500 text-slate-200 cursor-pointer disabled:opacity-40"
                     >
                       <option value="" disabled>Select Telecaller...</option>
                       <option value="unassign">❌ Make Unassigned</option>
@@ -1147,11 +1275,30 @@ export default function AdminDashboard({
                         const caller = isUnassign ? null : telecallers.find(t => t.uid === bulkAssignTarget);
                         handleBulkAssign(callerId, caller ? caller.name : null);
                       }}
-                      disabled={bulkAssignLoading || !bulkAssignTarget}
-                      className="py-2 px-4 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-violet-900/10 flex items-center justify-center whitespace-nowrap"
+                      disabled={bulkAssignLoading || !bulkAssignTarget || leadsDirectoryFilter === 'archived'}
+                      className="py-2 px-4 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-violet-900/10 flex items-center justify-center whitespace-nowrap"
                     >
                       {bulkAssignLoading ? 'Assigning...' : 'Assign'}
                     </button>
+
+                    {/* Archive / Unarchive Action Button */}
+                    {leadsDirectoryFilter === 'archived' ? (
+                      <button
+                        onClick={() => handleBulkArchive(false)}
+                        disabled={bulkArchiveLoading}
+                        className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-900/10 flex items-center justify-center whitespace-nowrap gap-1.5"
+                      >
+                        📂 {bulkArchiveLoading ? 'Restoring...' : 'Unarchive Selected'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleBulkArchive(true)}
+                        disabled={bulkArchiveLoading}
+                        className="py-2 px-4 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-amber-900/10 flex items-center justify-center whitespace-nowrap gap-1.5"
+                      >
+                        📁 {bulkArchiveLoading ? 'Archiving...' : 'Archive Selected'}
+                      </button>
+                    )}
 
                     <button
                       onClick={() => {
@@ -1159,7 +1306,7 @@ export default function AdminDashboard({
                         setBulkAssignTarget('');
                       }}
                       className="py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-slate-200 border border-slate-700/80 rounded-xl text-xs transition disabled:opacity-50"
-                      disabled={bulkAssignLoading}
+                      disabled={bulkAssignLoading || bulkArchiveLoading}
                     >
                       Cancel
                     </button>
@@ -1168,7 +1315,9 @@ export default function AdminDashboard({
               </div>
             )}
           </>
-        )}
+        );
+      })()}
+
 
           {/* TAB 3: TELECALLERS POOL */}
           {activeTab === 'staff' && (

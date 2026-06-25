@@ -52,6 +52,8 @@ export default function TelecallerDashboard({
   // Filter lists
   const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
   const filteredLeads = leads.filter(lead => {
+    if (lead.archived === true) return false;
+
     if (filterType === 'pending') {
       return lead.status !== 'Converted' && lead.status !== 'Not Interested' && lead.status !== 'Warm';
     } else if (filterType === 'followup') {

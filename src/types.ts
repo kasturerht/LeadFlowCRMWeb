@@ -20,6 +20,7 @@ export interface Lead {
   updatedAt?: string;
   label?: string;
   followUpDate?: string | null;
+  archived?: boolean;
 }
 
 export interface Interaction {
