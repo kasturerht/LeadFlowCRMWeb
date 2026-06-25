@@ -8,7 +8,8 @@ import {
   subscribeToAllInteractions, 
   subscribeToAuditLogs,
   bulkAssignLeads,
-  archiveFirebaseLeads
+  archiveFirebaseLeads,
+  deleteFirebaseLeads
 } from '../lib/firebaseService';
 import { doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -35,7 +36,8 @@ import {
   Trophy,
   Flame,
   Sun,
-  Moon
+  Moon,
+  Trash2
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -85,6 +87,8 @@ export default function AdminDashboard({
   const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
   const [bulkAssignTarget, setBulkAssignTarget] = useState<string>('');
   const [bulkArchiveLoading, setBulkArchiveLoading] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
 
   // Leads Directory filters states
   const [leadsDirectoryFilter, setLeadsDirectoryFilter] = useState<'active' | 'archived' | 'all'>('active');
@@ -202,6 +206,26 @@ export default function AdminDashboard({
       setBulkArchiveLoading(false);
     }
   };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeadIds.length === 0) return;
+    setBulkDeleteLoading(true);
+    try {
+      await deleteFirebaseLeads(
+        selectedLeadIds,
+        adminUser.uid,
+        adminUser.name
+      );
+      flashMessage(`Successfully permanently deleted ${selectedLeadIds.length} leads from database.`);
+      setSelectedLeadIds([]);
+      setShowDeleteConfirmModal(false);
+    } catch (err: any) {
+      flashMessage("Bulk deletion failed: " + err.message, true);
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
 
 
   const handleAddNewTelecaller = async (e: React.FormEvent) => {
@@ -1299,6 +1323,15 @@ export default function AdminDashboard({
                         📁 {bulkArchiveLoading ? 'Archiving...' : 'Archive Selected'}
                       </button>
                     )}
+                    <button
+                      onClick={() => setShowDeleteConfirmModal(true)}
+                      disabled={bulkAssignLoading || bulkArchiveLoading || bulkDeleteLoading}
+                      className="py-2 px-3 bg-red-650 hover:bg-red-600 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-red-900/10 flex items-center justify-center gap-1.5"
+                      title="Permanently Delete Selected Leads"
+                    >
+                      <Trash2 size={14} />
+                      <span className="hidden sm:inline">Delete</span>
+                    </button>
 
                     <button
                       onClick={() => {
@@ -1306,9 +1339,44 @@ export default function AdminDashboard({
                         setBulkAssignTarget('');
                       }}
                       className="py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-slate-200 border border-slate-700/80 rounded-xl text-xs transition disabled:opacity-50"
-                      disabled={bulkAssignLoading || bulkArchiveLoading}
+                      disabled={bulkAssignLoading || bulkArchiveLoading || bulkDeleteLoading}
                     >
                       Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delete Confirmation Modal Overlay */}
+            {showDeleteConfirmModal && (
+              <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in duration-200">
+                  <div className="flex items-center gap-3 text-red-500 pb-2 border-b border-slate-800">
+                    <ShieldAlert size={24} className="shrink-0 animate-bounce" />
+                    <h3 className="font-bold text-md text-slate-200">Confirm Permanent Deletion</h3>
+                  </div>
+
+                  <p className="text-xs text-slate-400 leading-relaxed py-2">
+                    Are you absolutely sure you want to permanently delete <span className="text-red-400 font-bold font-mono">[{selectedLeadIds.length}]</span> selected leads from the database? 
+                    <br />
+                    <strong className="text-red-450 block mt-2">⚠️ Warning: This action is irreversible and the deleted records cannot be recovered.</strong>
+                  </p>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setShowDeleteConfirmModal(false)}
+                      disabled={bulkDeleteLoading}
+                      className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700 rounded-xl text-xs transition font-semibold"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={bulkDeleteLoading}
+                      className="flex-1 py-2.5 bg-red-650 hover:bg-red-600 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-red-900/10 flex justify-center items-center gap-1.5"
+                    >
+                      {bulkDeleteLoading ? 'Deleting...' : 'Permanently Delete'}
                     </button>
                   </div>
                 </div>

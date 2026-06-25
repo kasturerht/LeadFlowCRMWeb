@@ -331,3 +331,27 @@ export async function archiveFirebaseLeads(
   );
 }
 
+// Bulk Delete Leads
+export async function deleteFirebaseLeads(
+  leadIds: string[],
+  adminUserUid: string,
+  adminUserName: string
+) {
+  const batch = writeBatch(db);
+
+  leadIds.forEach(id => {
+    batch.delete(doc(db, "leads", id));
+  });
+
+  await batch.commit();
+
+  // Log Action
+  await logFirebaseAction(
+    "Bulk Lead Deletion",
+    `Permanently deleted ${leadIds.length} leads from database.`,
+    adminUserUid,
+    adminUserName
+  );
+}
+
+
