@@ -172,21 +172,26 @@ export default function ReportsTab({ leads, telecallers }: ReportsTabProps) {
       periodStart = new Date(sYear, sMonth - 1, sDay, 0, 0, 0, 0);
     }
 
-    const periodNewLeadsCount = activeLeads.filter(l => {
-      const dateStr = l.uploadedAt || l.updatedAt;
-      if (!dateStr) return false;
-      const time = new Date(dateStr).getTime();
-      return time >= periodStart.getTime();
-    }).length;
+    const periodNewLeadIdsSet = new Set(
+      activeLeads.filter(l => {
+        const dateStr = l.uploadedAt || l.updatedAt;
+        if (!dateStr) return false;
+        const time = new Date(dateStr).getTime();
+        return time >= periodStart.getTime();
+      }).map(l => l.id)
+    );
+
+    const periodNewLeadsCount = periodNewLeadIdsSet.size;
 
     const newLeadsTouchedCount = activeLeads.filter(l => {
-      const dateStr = l.uploadedAt || l.updatedAt;
-      if (!dateStr) return false;
-      const time = new Date(dateStr).getTime();
-      return time >= periodStart.getTime() && uniqueLeadsTouchedSet.has(l.id);
+      return periodNewLeadIdsSet.has(l.id) && uniqueLeadsTouchedSet.has(l.id);
     }).length;
 
     const backlogLeadsTouchedCount = Math.max(0, uniqueLeadsTouched - newLeadsTouchedCount);
+
+    const freshLeadsDialsCount = periodInteractions.filter(i => periodNewLeadIdsSet.has(i.leadId)).length;
+    const backlogLeadsDialsCount = Math.max(0, totalCalls - freshLeadsDialsCount);
+    const repeatDialsCount = Math.max(0, totalCalls - uniqueLeadsTouched);
 
     const periodConversionRate = uniqueLeadsTouched > 0 
       ? Math.round((convertedSet.size / uniqueLeadsTouched) * 100) 
@@ -283,6 +288,9 @@ export default function ReportsTab({ leads, telecallers }: ReportsTabProps) {
       periodNewLeadsCount,
       newLeadsTouchedCount,
       backlogLeadsTouchedCount,
+      freshLeadsDialsCount,
+      backlogLeadsDialsCount,
+      repeatDialsCount,
       periodConversionRate,
       leaderboard,
       auditLogs
@@ -681,10 +689,10 @@ export default function ReportsTab({ leads, telecallers }: ReportsTabProps) {
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: 'New Leads Assigned', count: metrics.periodNewLeadsCount, color: 'text-violet-400', border: 'border-violet-500/30', bg: 'bg-violet-950/20', sub: 'Fresh leads received in period' },
-                      { label: 'Fresh Leads Dialed', count: metrics.newLeadsTouchedCount, color: 'text-sky-400', border: 'border-sky-500/30', bg: 'bg-sky-950/20', sub: `${metrics.periodNewLeadsCount > 0 ? Math.round((metrics.newLeadsTouchedCount / metrics.periodNewLeadsCount) * 100) : 0}% of fresh called` },
-                      { label: 'Backlog / Follow-ups Dialed', count: metrics.backlogLeadsTouchedCount, color: 'text-amber-400', border: 'border-amber-500/30', bg: 'bg-amber-950/20', sub: 'Due followups & busy calls dialed' },
-                      { label: 'Total Call Dials', count: metrics.totalCalls, color: 'text-emerald-400', border: 'border-emerald-500/30', bg: 'bg-emerald-950/20', sub: `${formatDuration(metrics.totalDuration)} total talk time` }
+                      { label: 'New Leads Assigned', count: metrics.periodNewLeadsCount, color: 'text-violet-400', border: 'border-violet-500/30', bg: 'bg-violet-950/20', sub: 'Fresh prospects received in period' },
+                      { label: 'Fresh Prospects Called', count: metrics.newLeadsTouchedCount, color: 'text-sky-400', border: 'border-sky-500/30', bg: 'bg-sky-950/20', sub: `${metrics.freshLeadsDialsCount} Dials placed • ${metrics.periodNewLeadsCount > 0 ? Math.round((metrics.newLeadsTouchedCount / metrics.periodNewLeadsCount) * 100) : 0}% called` },
+                      { label: 'Backlog Prospects Called', count: metrics.backlogLeadsTouchedCount, color: 'text-amber-400', border: 'border-amber-500/30', bg: 'bg-amber-950/20', sub: `${metrics.backlogLeadsDialsCount} Dials placed • Due & busy` },
+                      { label: 'Total Call Dials Placed', count: metrics.totalCalls, color: 'text-emerald-400', border: 'border-emerald-500/30', bg: 'bg-emerald-950/20', sub: `${metrics.uniqueLeadsTouched} Unique Prospects • ${metrics.repeatDialsCount} Repeat Dial${metrics.repeatDialsCount !== 1 ? 's' : ''}` }
                     ].map(({ label, count, color, border, bg, sub }) => (
                       <div key={label} className={`p-4 rounded-2xl border ${border} ${bg} flex flex-col justify-between`}>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
