@@ -14,15 +14,17 @@ export interface Lead {
   phone: string;
   email: string;
   source: string;
-  status: 'Converted' | 'Warm' | 'Not Interested' | 'Busy' | 'Ringing' | 'Cold' | 'New';
+  status: string;
   notes: string;
   assignedTo: string | null; // UID of telecaller
   updatedAt?: string;
   label?: string;
   followUpDate?: string | null;
   archived?: boolean;
+  visited?: boolean;
   batchId?: string;
   uploadedAt?: string;
+  attemptCount?: number;
 }
 
 export interface Interaction {
@@ -35,6 +37,9 @@ export interface Interaction {
   notes: string;
   timestamp: string;
   duration: number;
+  followUpDate?: string | null;
+  isVisitLog?: boolean;
+  isManualDuration?: boolean;
 }
 
 export interface AuditLog {

@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
-import { UserProfile, Lead, Interaction, AuditLog, UploadBatch } from '../types';
+import { UserProfile, Lead, AuditLog, UploadBatch } from '../types';
 import { 
   ingestFirebaseLeads, 
   autoDistributeFirebaseLeads, 
   subscribeToLeads, 
   subscribeToTelecallers, 
-  subscribeToAllInteractions, 
   subscribeToAuditLogs,
   bulkAssignLeads,
   archiveFirebaseLeads,
   deleteFirebaseLeads,
   subscribeToUploadBatches,
-  rollbackUploadBatch
+  rollbackUploadBatch,
+  getPrimaryCategory
 } from '../lib/firebaseService';
+import ReportsTab from './ReportsTab';
 import { doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -28,12 +29,8 @@ import {
   Upload, 
   Users,
   X,
-  BarChart3,
-  Calendar,
-  Clock,
-  PhoneCall,
   Award,
-  Sparkles,
+  Clock,
   ShieldAlert,
   Trophy,
   Flame,
@@ -59,7 +56,6 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [telecallers, setTelecallers] = useState<UserProfile[]>([]);
-  const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // State for Bulk Input
@@ -107,14 +103,6 @@ export default function AdminDashboard({
   const [rollbackLoadingBatchId, setRollbackLoadingBatchId] = useState<string | null>(null);
   const [batchIdToRollbackConfirm, setBatchIdToRollbackConfirm] = useState<string | null>(null);
 
-  // Reports Filters States
-  const [reportDateRange, setReportDateRange] = useState<'today' | 'yesterday' | '7days' | '30days' | 'all' | 'custom'>('all');
-  const [reportCustomStartDate, setReportCustomStartDate] = useState('');
-  const [reportCustomEndDate, setReportCustomEndDate] = useState('');
-  const [reportTelecallerFilter, setReportTelecallerFilter] = useState('ALL');
-  const [reportLabelFilter, setReportLabelFilter] = useState('ALL');
-  const [reportStatusFilter, setReportStatusFilter] = useState('ALL');
-  const [showReportRecords, setShowReportRecords] = useState(false);
 
   const handleToggleActiveState = async (caller: UserProfile) => {
     try {
@@ -314,14 +302,12 @@ export default function AdminDashboard({
   useEffect(() => {
     const unsubLeads = subscribeToLeads((list) => setLeads(list));
     const unsubCallers = subscribeToTelecallers((list) => setTelecallers(list));
-    const unsubInteractions = subscribeToAllInteractions((list) => setInteractions(list));
     const unsubLogs = subscribeToAuditLogs((list) => setAuditLogs(list));
     const unsubBatches = subscribeToUploadBatches((list) => setUploadBatches(list));
 
     return () => {
       unsubLeads();
       unsubCallers();
-      unsubInteractions();
       unsubLogs();
       unsubBatches();
     };
@@ -491,14 +477,16 @@ export default function AdminDashboard({
   };
 
   // Counts & stats
+  const activeLeads = leads.filter(l => !l.archived);
   const totalLeadsCount = leads.length;
-  const convertedCount = leads.filter(l => l.status === 'Converted').length;
-  const followupCount = leads.filter(l => l.status === 'Warm').length;
-  const pendingCount = leads.filter(l => l.status !== 'Converted' && l.status !== 'Not Interested' && l.status !== 'Warm').length;
-  const unassignedCount = leads.filter(l => l.assignedTo === null).length;
+  const activeLeadsCount = activeLeads.length;
+  const convertedCount = activeLeads.filter(l => getPrimaryCategory(l) === 'CONVERTED').length;
+  const followupCount = activeLeads.filter(l => getPrimaryCategory(l) === 'FOLLOWUP').length;
+  const pendingCount = activeLeads.filter(l => getPrimaryCategory(l) === 'PENDING').length;
+  const unassignedCount = activeLeads.filter(l => l.assignedTo === null).length;
 
-  const conversionRate = totalLeadsCount > 0 
-    ? Math.round((convertedCount / totalLeadsCount) * 100) 
+  const conversionRate = activeLeadsCount > 0 
+    ? Math.round((convertedCount / activeLeadsCount) * 100) 
     : 0;
 
   return (
@@ -545,10 +533,11 @@ export default function AdminDashboard({
 
           <button
             onClick={onLogout}
-            className="p-2 bg-zinc-900 hover:bg-red-500/10 border border-zinc-800 hover:border-red-500/30 text-zinc-400 hover:text-red-450 rounded-lg transition shadow-sm"
-            title="Log Out"
+            className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-500/50 text-rose-300 hover:text-rose-200 font-bold rounded-xl transition shadow-sm flex items-center gap-1.5 text-xs"
+            title="Sign Out of Secure Workspace"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
+            <span>Sign Out</span>
           </button>
         </div>
       </header>
@@ -562,8 +551,7 @@ export default function AdminDashboard({
             { id: 'overview', label: 'Dashboard Overview', icon: TrendingUp },
             { id: 'leads', label: 'Leads Directory', icon: FileSpreadsheet },
             { id: 'staff', label: 'Telecallers Pool', icon: Users },
-            { id: 'interactions', label: 'Call History Timeline', icon: Activity },
-            { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 }
+            { id: 'reports', label: 'Reports & Analytics', icon: Award }
           ].map(tab => {
             const Icon = tab.icon;
             return (
@@ -629,7 +617,7 @@ export default function AdminDashboard({
                 .sort((a, b) => b.count - a.count);
 
               // 3. Find highest converting caller
-              const starCaller = (() => {
+              const topPerformer = (() => {
                 if (telecallers.length === 0) return null;
                 const callersWithMetrics = telecallers.map(caller => {
                   const assigned = leads.filter(l => l.assignedTo === caller.uid).length;
@@ -642,9 +630,9 @@ export default function AdminDashboard({
               })();
 
               // 4. Live Conversions Feed
-              const recentConversions = interactions
-                .filter(item => item.statusAfter === 'Converted')
-                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              const recentConversions = leads
+                .filter(item => item.status === 'Converted')
+                .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
                 .slice(0, 3);
 
               return (
@@ -652,8 +640,8 @@ export default function AdminDashboard({
                   {/* Stats Cards */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
-                      { label: 'Total Database Leads', count: totalLeadsCount, desc: 'Ingested records', color: 'text-violet-400', bg: 'bg-violet-500/5 border-violet-500/10', icon: FileSpreadsheet },
-                      { label: 'Deals Closed (Converted)', count: convertedCount, desc: `${conversionRate}% Conversion Rate`, color: 'text-emerald-400', bg: 'bg-emerald-500/5 border-emerald-500/10', icon: Trophy },
+                      { label: 'Total Database Leads', count: totalLeadsCount, desc: `${activeLeadsCount} active (${totalLeadsCount - activeLeadsCount} archived)`, color: 'text-violet-400', bg: 'bg-violet-500/5 border-violet-500/10', icon: FileSpreadsheet },
+                      { label: 'Deals Closed (Converted)', count: convertedCount, desc: `${conversionRate}% Active Win Rate`, color: 'text-emerald-400', bg: 'bg-emerald-500/5 border-emerald-500/10', icon: Trophy },
                       { label: 'Follow-ups (Warm)', count: followupCount, desc: 'Callbacks scheduled', color: 'text-amber-400', bg: 'bg-amber-500/5 border-amber-500/10', icon: Flame },
                       { label: 'Pending Queue', count: pendingCount, desc: `${unassignedCount} Unassigned leads`, color: 'text-cyan-400', bg: 'bg-cyan-500/5 border-cyan-500/10', icon: Clock }
                     ].map((stat, i) => {
@@ -665,7 +653,7 @@ export default function AdminDashboard({
                             <p className={`text-3xl font-black mt-2 ${stat.color}`}>{stat.count}</p>
                             <p className="text-[10px] text-slate-500 mt-1">{stat.desc}</p>
                           </div>
-                          <div className={`p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 ${stat.color} group-hover:bg-slate-800/60 transition`}>
+                          <div className={`p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 ${stat.color} group-hover:bg-slate-800/60 transition shrink-0`}>
                             <Icon size={20} />
                           </div>
                         </div>
@@ -673,115 +661,77 @@ export default function AdminDashboard({
                     })}
                   </div>
 
-                  {/* Actionable Alerts Bar */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs uppercase font-extrabold tracking-widest text-slate-500 flex items-center gap-1.5">
-                      <Sparkles size={12} className="text-violet-400" />
-                      <span>Interactive Smart Insights</span>
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {/* Alert 1: Unassigned leads alert */}
-                      {unassignedCount > 0 ? (
-                        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 backdrop-blur flex items-start gap-3 shadow-lg relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300">
-                          <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
-                            <ShieldAlert size={18} className="animate-bounce" />
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Main Charts area */}
+                    <div className="lg:col-span-2 space-y-6 flex flex-col">
+                      {/* Telecaller Status Grid */}
+                      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 shadow-lg shadow-slate-950/20 group hover:border-slate-700 transition">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="font-bold text-sm text-slate-200">Telecaller Workload Activity</h3>
+                            <p className="text-[10px] text-slate-500">Live tracker of caller engagement</p>
                           </div>
-                          <div className="space-y-1 flex-1">
-                            <p className="text-xs font-bold text-amber-300">Unassigned Leads Queue</p>
-                            <p className="text-[10px] text-slate-400 leading-relaxed">
-                              There are <strong className="text-amber-200">{unassignedCount} leads</strong> awaiting distribution. Split workload now.
-                            </p>
-                            <button
-                              onClick={() => setShowSplitterModal(true)}
-                              className="mt-2 text-[10px] font-bold text-white bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded-lg transition shadow-md shadow-amber-900/20 flex items-center gap-1"
-                            >
-                              <ArrowRightLeft size={10} />
-                              <span>Run Splitter Now</span>
-                            </button>
-                          </div>
-                          <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                            <ShieldAlert size={80} className="text-amber-400" />
-                          </div>
+                          <Users size={16} className="text-slate-400 group-hover:text-violet-400 transition" />
                         </div>
-                      ) : (
-                        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 backdrop-blur flex items-start gap-3 shadow-lg relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300">
-                          <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
-                            <CheckCircle2 size={18} />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <p className="text-xs font-bold text-emerald-300">Queue Fully Assigned</p>
-                            <p className="text-[10px] text-slate-400 leading-relaxed">
-                              Great job! All database leads are currently allocated to callers. Workload is balanced.
-                            </p>
-                          </div>
-                          <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                            <CheckCircle2 size={80} className="text-emerald-400" />
-                          </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {telecallers.length === 0 ? (
+                            <div className="col-span-full py-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">
+                              No telecallers active. Add staff in the pool.
+                            </div>
+                          ) : (
+                            telecallers.slice(0, 4).map(caller => {
+                              const callerAssigned = leads.filter(l => l.assignedTo === caller.uid).length;
+                              const callerConverted = leads.filter(l => l.assignedTo === caller.uid && l.status === 'Converted').length;
+                              const callerRate = callerAssigned > 0 ? Math.round((callerConverted / callerAssigned) * 100) : 0;
+                              return (
+                                <div key={caller.uid} className="bg-slate-950/50 rounded-xl p-3 border border-slate-800/80 shadow-inner flex flex-col justify-between">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <span className="font-bold text-xs truncate max-w-[80%] text-slate-300">{caller.name}</span>
+                                    <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${caller.active ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`}></span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-[10px]">
+                                      <span className="text-slate-500">Assigned</span>
+                                      <span className="font-mono text-cyan-400 font-semibold">{callerAssigned}</span>
+                                    </div>
+                                    <div className="flex justify-between text-[10px]">
+                                      <span className="text-slate-500">Win Rate</span>
+                                      <span className={`font-mono font-bold ${callerRate > 15 ? 'text-emerald-400' : 'text-slate-400'}`}>{callerRate}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
                         </div>
-                      )}
+                      </div>
+                    </div>
 
-                      {/* Alert 2: Star Caller alert */}
-                      {starCaller ? (
-                        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 backdrop-blur flex items-start gap-3 shadow-lg relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300">
-                          <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
-                            <Trophy size={18} className="animate-pulse" />
+                    {/* Secondary pane */}
+                    <div className="space-y-6">
+                      {/* Top Performer Ribbon */}
+                      {topPerformer ? (
+                        <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-5 shadow-lg shadow-amber-950/10 group hover:border-amber-500/40 transition">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 group-hover:text-amber-400 transition flex items-center gap-2">
+                              <Award size={14} /> Peak Performer
+                            </h3>
                           </div>
-                          <div className="space-y-1 flex-1">
-                            <p className="text-xs font-bold text-emerald-300">Star Caller recognition</p>
-                            <p className="text-[10px] text-slate-400 leading-relaxed">
-                              <strong className="text-emerald-250 font-bold">{starCaller.name}</strong> is leading with <strong className="text-emerald-300">{starCaller.converted} closed conversions</strong> ({starCaller.rate}% success).
-                            </p>
-                            <span className="inline-flex items-center gap-1 mt-2.5 text-[9px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                              🏆 Star Agent
-                            </span>
-                          </div>
-                          <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                            <Trophy size={80} className="text-emerald-400" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 backdrop-blur flex items-start gap-3 shadow-lg relative overflow-hidden group hover:border-slate-700/80 transition-all duration-300">
-                          <div className="p-2 rounded-xl bg-slate-800 text-slate-450 shrink-0">
-                            <Users size={18} />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <p className="text-xs font-bold text-slate-300">Agent Activity Steady</p>
-                            <p className="text-[10px] text-slate-500 leading-relaxed">
-                              No closed conversions registered in this database batch yet. Callers are pitching.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Alert 3: Warm callback alert */}
-                      {followupCount > 0 ? (
-                        <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/20 backdrop-blur flex items-start gap-3 shadow-lg relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300">
-                          <div className="p-2 rounded-xl bg-violet-500/20 text-violet-400 shrink-0">
-                            <Flame size={18} className="animate-pulse" />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <p className="text-xs font-bold text-violet-300">Active Pipelines Warm</p>
-                            <p className="text-[10px] text-slate-400 leading-relaxed">
-                              There are <strong className="text-violet-200">{followupCount} leads</strong> marked as warm callbacks. Push for closures.
-                            </p>
-                            <button
-                              onClick={() => setActiveTab('leads')}
-                              className="mt-2 text-[10px] font-bold text-white bg-violet-600 hover:bg-violet-500 px-3 py-1.5 rounded-lg transition shadow-md shadow-violet-900/20 flex items-center gap-1"
-                            >
-                              <span>Manage Directory</span>
-                            </button>
-                          </div>
-                          <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-                            <Flame size={80} className="text-violet-400" />
+                          <div className="flex items-center gap-3 mt-3">
+                            <div className="h-10 w-10 bg-amber-500/20 rounded-full flex items-center justify-center border border-amber-500/30 text-amber-400 font-bold shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                              {topPerformer.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-amber-100">{topPerformer.name}</p>
+                              <p className="text-[10px] text-amber-500/70 font-semibold mt-0.5">{topPerformer.converted} Conversions • {topPerformer.rate}% Rate</p>
+                            </div>
                           </div>
                         </div>
                       ) : (
-                        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 backdrop-blur flex items-start gap-3 shadow-lg relative overflow-hidden group hover:border-slate-700/80 transition-all duration-300">
-                          <div className="p-2 rounded-xl bg-slate-800 text-slate-450 shrink-0">
-                            <Activity size={18} />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <p className="text-xs font-bold text-slate-300">System Healthy</p>
+                        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center text-center h-[130px] border-dashed">
+                          <Award size={20} className="text-slate-700 mb-2" />
+                          <div>
+                            <p className="text-xs font-bold text-slate-500">Peak Performer</p>
                             <p className="text-[10px] text-slate-500 leading-relaxed">
                               Sync engine operational. Zero high-priority warm pipeline reminders active.
                             </p>
@@ -807,10 +757,9 @@ export default function AdminDashboard({
                           {recentConversions.map((conv) => (
                             <div key={conv.id} className="flex items-center gap-2 border-l sm:border-l-0 sm:border-r border-slate-800/80 pl-3 sm:pl-0 pr-4 py-0.5 last:border-0 shrink-0 text-xs">
                               <span className="text-[10px] text-slate-500">🎉</span>
-                              <strong className="text-slate-200 font-bold">{conv.callerName}</strong>
+                              <strong className="text-slate-200 font-bold">{telecallers.find(t => t.uid === conv.assignedTo)?.name || 'Someone'}</strong>
                               <span className="text-slate-400">converted</span>
-                              <strong className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent font-black">{conv.notes ? conv.notes.split(' | ')[0] : 'a lead'}</strong>
-                              <span className="text-[9px] font-mono text-slate-500">({conv.duration}s call)</span>
+                              <strong className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent font-black">{conv.name}</strong>
                             </div>
                           ))}
                         </div>
@@ -870,26 +819,26 @@ export default function AdminDashboard({
 
                       <div className="space-y-3.5 pt-2 flex-1 flex flex-col justify-center">
                         {(() => {
-                          const getStatusMetrics = (status: string) => {
-                            const count = leads.filter(l => l.status === status).length;
-                            const percentage = totalLeadsCount > 0 ? Math.round((count / totalLeadsCount) * 100) : 0;
+                          const getCategoryMetrics = (cat: string) => {
+                            const count = activeLeads.filter(l => getPrimaryCategory(l) === cat).length;
+                            const percentage = activeLeadsCount > 0 ? Math.round((count / activeLeadsCount) * 100) : 0;
                             return { count, percentage };
                           };
 
                           return [
-                            { status: 'New', color: 'bg-violet-500', barBg: 'bg-violet-950/30', border: 'border-violet-900/30', text: 'text-violet-400' },
-                            { status: 'Warm', color: 'bg-amber-500', barBg: 'bg-amber-950/30', border: 'border-amber-900/30', text: 'text-amber-400' },
-                            { status: 'Converted', color: 'bg-emerald-500', barBg: 'bg-emerald-950/30', border: 'border-emerald-900/30', text: 'text-emerald-400' },
-                            { status: 'Not Interested', color: 'bg-red-500', barBg: 'bg-red-950/30', border: 'border-red-900/30', text: 'text-red-400' },
-                            { status: 'Busy', color: 'bg-sky-500', barBg: 'bg-sky-950/30', border: 'border-sky-900/30', text: 'text-sky-400' },
-                            { status: 'Ringing', color: 'bg-indigo-500', barBg: 'bg-indigo-950/30', border: 'border-indigo-900/30', text: 'text-indigo-400' },
-                            { status: 'Cold', color: 'bg-slate-500', barBg: 'bg-slate-900/30', border: 'border-slate-800/30', text: 'text-slate-400' }
-                          ].map(({ status, color, barBg, border, text }) => {
-                            const { count, percentage } = getStatusMetrics(status);
+                            { label: 'Pending Queue (0 Attempts)', cat: 'PENDING', color: 'bg-amber-500', barBg: 'bg-amber-950/30', border: 'border-amber-900/30', text: 'text-amber-400' },
+                            { label: 'Follow-ups (Scheduled)', cat: 'FOLLOWUP', color: 'bg-blue-500', barBg: 'bg-blue-950/30', border: 'border-blue-900/30', text: 'text-blue-400' },
+                            { label: 'Visit Scheduled', cat: 'VISIT_SCHEDULED', color: 'bg-emerald-500', barBg: 'bg-emerald-950/30', border: 'border-emerald-900/30', text: 'text-emerald-400' },
+                            { label: 'Visited Site', cat: 'VISITED', color: 'bg-purple-500', barBg: 'bg-purple-950/30', border: 'border-purple-900/30', text: 'text-purple-400' },
+                            { label: 'Attempted (Busy/Ringing/No Answer)', cat: 'ATTEMPTED', color: 'bg-violet-500', barBg: 'bg-violet-950/30', border: 'border-violet-900/30', text: 'text-violet-400' },
+                            { label: 'Deals Closed (Converted)', cat: 'CONVERTED', color: 'bg-teal-500', barBg: 'bg-teal-950/30', border: 'border-teal-900/30', text: 'text-teal-400' },
+                            { label: 'Rejected / Closed', cat: 'REJECTED', color: 'bg-rose-500', barBg: 'bg-rose-950/30', border: 'border-rose-900/30', text: 'text-rose-400' }
+                          ].map(({ label, cat, color, barBg, border, text }) => {
+                            const { count, percentage } = getCategoryMetrics(cat);
                             return (
-                              <div key={status} className="space-y-1">
+                              <div key={cat} className="space-y-1">
                                 <div className="flex justify-between items-center text-xs">
-                                  <span className="text-slate-355 font-medium">{status}</span>
+                                  <span className="text-slate-300 font-medium">{label}</span>
                                   <span className="text-slate-500 text-[10px]">{count} leads <span className={`ml-1 font-bold ${text}`}>({percentage}%)</span></span>
                                 </div>
                                 <div className={`h-2 w-full rounded-full ${barBg} border ${border} overflow-hidden`}>
@@ -1074,7 +1023,7 @@ export default function AdminDashboard({
                             </div>
                             <div className="text-right shrink-0">
                               <p className="text-slate-400 font-medium">👤 {log.userName}</p>
-                              <p className="text-[10px] text-slate-600 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">{(() => { const d = new Date(log.timestamp); const t = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); const now = new Date(); return d.toDateString() === now.toDateString() ? 'Today, ' + t : d.toLocaleDateString([], {month:'short', day:'numeric'}) + ', ' + t; })()}</p>
                             </div>
                           </div>
                         ))
@@ -1284,7 +1233,7 @@ export default function AdminDashboard({
                                 <td className="p-4">
                                   <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${
                                     lead.status === 'Converted' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                                    lead.status === 'Warm' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+                                    lead.status === 'Follow-up' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
                                     lead.status === 'Not Interested' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
                                     'bg-sky-500/10 border-sky-500/20 text-sky-400'
                                   }`}>
@@ -1660,766 +1609,12 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* TAB 4: INTERACTION HISTORY */}
-          {activeTab === 'interactions' && (
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-800/80">
-                <h3 className="font-bold text-md">Call Interaction Logs</h3>
-                <p className="text-xs text-slate-400 mt-1">Timeline logs of status updates pushed from callers</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold bg-slate-900/40">
-                      <th className="p-4">Time</th>
-                      <th className="p-4">Telecaller</th>
-                      <th className="p-4">Flow Transition</th>
-                      <th className="p-4">Notes / Details</th>
-                      <th className="p-4">Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {interactions.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="p-8 text-center text-slate-500">
-                          No call interactions recorded yet. Status updates will register here instantly.
-                        </td>
-                      </tr>
-                    ) : (
-                      interactions.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-900/30 transition">
-                          <td className="p-4 text-slate-400 font-mono">
-                            {new Date(item.timestamp).toLocaleString()}
-                          </td>
-                          <td className="p-4 font-bold text-violet-400">
-                            👤 {item.callerName}
-                          </td>
-                          <td className="p-4 flex items-center gap-2 mt-1">
-                            <span className="px-2 py-0.5 bg-slate-800 rounded-md text-[10px] text-slate-400">{item.statusBefore}</span>
-                            <span>→</span>
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                              item.statusAfter === 'Converted' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                              item.statusAfter === 'Warm' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                              'bg-sky-500/10 text-sky-400 border border-sky-500/20'
-                            }`}>{item.statusAfter}</span>
-                          </td>
-                          <td className="p-4 text-slate-300 max-w-sm truncate" title={item.notes}>
-                            {item.notes || '—'}
-                          </td>
-                          <td className="p-4 font-mono text-slate-500">
-                            {item.duration}s
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+
 
           {/* TAB 5: REPORTS & ANALYTICS */}
-          {activeTab === 'reports' && (() => {
-            // Helper function to check date ranges
-            const isDateInRange = (dateStr: string) => {
-              if (reportDateRange === 'all') return true;
-              if (!dateStr) return false;
-              const d = new Date(dateStr);
-              if (isNaN(d.getTime())) return false;
-              const now = new Date();
-              
-              const getMidnight = (date: Date) => {
-                const temp = new Date(date);
-                temp.setHours(0, 0, 0, 0);
-                return temp;
-              };
-              
-              const dMidnight = getMidnight(d);
-              const nowMidnight = getMidnight(now);
-              
-              if (reportDateRange === 'today') {
-                return dMidnight.getTime() === nowMidnight.getTime();
-              }
-              if (reportDateRange === 'yesterday') {
-                const yesterday = new Date(nowMidnight);
-                yesterday.setDate(yesterday.getDate() - 1);
-                return dMidnight.getTime() === yesterday.getTime();
-              }
-              if (reportDateRange === '7days') {
-                const boundary = new Date(nowMidnight);
-                boundary.setDate(boundary.getDate() - 7);
-                return d.getTime() >= boundary.getTime();
-              }
-              if (reportDateRange === '30days') {
-                const boundary = new Date(nowMidnight);
-                boundary.setDate(boundary.getDate() - 30);
-                return d.getTime() >= boundary.getTime();
-              }
-              if (reportDateRange === 'custom') {
-                const start = reportCustomStartDate ? new Date(reportCustomStartDate + 'T00:00:00') : null;
-                const end = reportCustomEndDate ? new Date(reportCustomEndDate + 'T23:59:59') : null;
-                if (start && d.getTime() < start.getTime()) return false;
-                if (end && d.getTime() > end.getTime()) return false;
-                return true;
-              }
-              return true;
-            };
-
-            // Filter leads
-            const filteredReportLeads = leads.filter(l => {
-              if (reportTelecallerFilter !== 'ALL' && l.assignedTo !== reportTelecallerFilter) return false;
-              const lbl = l.label || 'General';
-              if (reportLabelFilter !== 'ALL' && lbl !== reportLabelFilter) return false;
-              if (reportStatusFilter !== 'ALL' && l.status !== reportStatusFilter) return false;
-              return isDateInRange(l.updatedAt || '');
-            });
-
-            // Filter interactions
-            const filteredReportInteractions = interactions.filter(item => {
-              if (reportTelecallerFilter !== 'ALL' && item.callerId !== reportTelecallerFilter) return false;
-              const lead = leads.find(l => l.id === item.leadId);
-              const lbl = lead?.label || 'General';
-              if (reportLabelFilter !== 'ALL' && lbl !== reportLabelFilter) return false;
-              if (reportStatusFilter !== 'ALL' && item.statusAfter !== reportStatusFilter) return false;
-              return isDateInRange(item.timestamp);
-            });
-
-            // Calculate KPIs
-            const totalLeadsVolume = filteredReportLeads.length;
-            const callsCompleted = filteredReportInteractions.length;
-            const convertedDeals = filteredReportLeads.filter(l => l.status === 'Converted').length;
-            
-            const totalDuration = filteredReportInteractions.reduce((acc, item) => acc + (item.duration || 0), 0);
-            const avgCallDuration = callsCompleted > 0 ? Math.round(totalDuration / callsCompleted) : 0;
-            const conversionRate = totalLeadsVolume > 0 ? Math.round((convertedDeals / totalLeadsVolume) * 100) : 0;
-
-            // Group interactions by date YYYY-MM-DD
-            const activityByDate: { [dateStr: string]: number } = {};
-            filteredReportInteractions.forEach(item => {
-              if (item.timestamp) {
-                const datePart = item.timestamp.substring(0, 10);
-                activityByDate[datePart] = (activityByDate[datePart] || 0) + 1;
-              }
-            });
-            const sortedDates = Object.keys(activityByDate).sort((a, b) => b.localeCompare(a)).slice(0, 10);
-
-            // Detailed daily activity performance summary grouping
-            const dailyPerformance: {
-              [dateStr: string]: {
-                calls: number;
-                leadsCalled: Set<string>;
-                conversions: number;
-                callbacks: number;
-                callers: Set<string>;
-                totalDuration: number;
-              }
-            } = {};
-
-            filteredReportInteractions.forEach(item => {
-              if (item.timestamp) {
-                const d = new Date(item.timestamp);
-                if (!isNaN(d.getTime())) {
-                  const datePart = d.toLocaleDateString('en-CA'); // YYYY-MM-DD local format
-                  if (!dailyPerformance[datePart]) {
-                    dailyPerformance[datePart] = {
-                      calls: 0,
-                      leadsCalled: new Set(),
-                      conversions: 0,
-                      callbacks: 0,
-                      callers: new Set(),
-                      totalDuration: 0
-                    };
-                  }
-                  const day = dailyPerformance[datePart];
-                  day.calls++;
-                  if (item.leadId) day.leadsCalled.add(item.leadId);
-                  if (item.callerId) day.callers.add(item.callerId);
-                  if (item.statusAfter === 'Converted') day.conversions++;
-                  if (item.statusAfter === 'Warm') day.callbacks++;
-                  day.totalDuration += (item.duration || 0);
-                }
-              }
-            });
-            const sortedPerformanceDates = Object.keys(dailyPerformance).sort((a, b) => b.localeCompare(a));
-
-            // Future follow-up pipeline agenda grouping
-            const upcomingFollowups: {
-              [dateStr: string]: {
-                leads: Lead[];
-                byCaller: { [callerName: string]: number };
-              }
-            } = {};
-
-            leads.forEach(lead => {
-              if (lead.status === 'Warm' && lead.followUpDate) {
-                const datePart = lead.followUpDate; // YYYY-MM-DD
-                if (!upcomingFollowups[datePart]) {
-                  upcomingFollowups[datePart] = {
-                    leads: [],
-                    byCaller: {}
-                  };
-                }
-                upcomingFollowups[datePart].leads.push(lead);
-                
-                let callerName = 'Unassigned';
-                if (lead.assignedTo) {
-                  const caller = telecallers.find(t => t.uid === lead.assignedTo);
-                  if (caller) callerName = caller.name;
-                }
-                upcomingFollowups[datePart].byCaller[callerName] = (upcomingFollowups[datePart].byCaller[callerName] || 0) + 1;
-              }
-            });
-            const sortedFollowupDates = Object.keys(upcomingFollowups).sort((a, b) => a.localeCompare(b));
-
-            // Group status distribution stats
-            const statusStats = [
-              { status: 'New', color: 'bg-violet-500', barBg: 'bg-violet-950/30', border: 'border-violet-900/30', text: 'text-violet-400' },
-              { status: 'Warm', color: 'bg-amber-500', barBg: 'bg-amber-950/30', border: 'border-amber-900/30', text: 'text-amber-400' },
-              { status: 'Converted', color: 'bg-emerald-500', barBg: 'bg-emerald-950/30', border: 'border-emerald-900/30', text: 'text-emerald-400' },
-              { status: 'Not Interested', color: 'bg-red-500', barBg: 'bg-red-950/30', border: 'border-red-900/30', text: 'text-red-400' },
-              { status: 'Busy', color: 'bg-sky-500', barBg: 'bg-sky-950/30', border: 'border-sky-900/30', text: 'text-sky-400' },
-              { status: 'Ringing', color: 'bg-indigo-500', barBg: 'bg-indigo-950/30', border: 'border-indigo-900/30', text: 'text-indigo-400' },
-              { status: 'Cold', color: 'bg-slate-500', barBg: 'bg-slate-900/30', border: 'border-slate-800/30', text: 'text-slate-400' }
-            ].map(item => {
-              const count = filteredReportLeads.filter(l => l.status === item.status).length;
-              const pct = totalLeadsVolume > 0 ? Math.round((count / totalLeadsVolume) * 100) : 0;
-              return { ...item, count, pct };
-            });
-
-            // Get unique labels list for dropdown filter options
-            const uniqueLabelsList = Array.from(new Set(leads.map(l => l.label || 'General'))).sort();
-
-            // Telecaller Performance Leaderboard Grid calculation
-            const telecallerReportList = telecallers.map(caller => {
-              const callerLeads = filteredReportLeads.filter(l => l.assignedTo === caller.uid);
-              const callerInteractions = filteredReportInteractions.filter(item => item.callerId === caller.uid);
-              const workload = callerLeads.length;
-              const callsDone = callerInteractions.length;
-              const converted = callerLeads.filter(l => l.status === 'Converted').length;
-              const callerConvRate = workload > 0 ? Math.round((converted / workload) * 100) : 0;
-              const callerTotalDuration = callerInteractions.reduce((acc, item) => acc + (item.duration || 0), 0);
-              const callerAvgDuration = callsDone > 0 ? Math.round(callerTotalDuration / callsDone) : 0;
-
-              return {
-                uid: caller.uid,
-                name: caller.name,
-                active: caller.active,
-                workload,
-                callsDone,
-                converted,
-                conversionRate: callerConvRate,
-                avgDuration: callerAvgDuration
-              };
-            }).sort((a, b) => b.converted - a.converted || b.conversionRate - a.conversionRate);
-
-            return (
-              <div className="space-y-6">
-                {/* Header title */}
-                <div>
-                  <h2 className="text-xl font-black tracking-wide bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">Reports & Performance Analytics</h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Dynamically filter, monitor, and analyze calling activity, conversion rates, and staff metrics.
-                  </p>
-                </div>
-
-                {/* Dashboard Filters Roster */}
-                <div className="p-5 border border-slate-800 bg-slate-900/40 backdrop-blur rounded-2xl space-y-4 shadow-lg shadow-slate-950/20 group hover:border-slate-700/80 transition-all duration-300">
-                  <h3 className="text-xs uppercase font-extrabold tracking-widest text-slate-500 flex items-center gap-2">
-                    <Calendar size={14} className="text-violet-400" />
-                    <span>Interactive Filters Control Deck</span>
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                    {/* Date picker drop-down */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Date Range</label>
-                      <select
-                        value={reportDateRange}
-                        onChange={(e) => setReportDateRange(e.target.value as any)}
-                        className="w-full text-xs bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-violet-500 rounded-xl px-3 py-2.5 outline-none text-slate-205 cursor-pointer transition-all duration-200"
-                      >
-                        <option value="all">All-Time Database Records</option>
-                        <option value="today">Today (Dailies)</option>
-                        <option value="yesterday">Yesterday</option>
-                        <option value="7days">Last 7 Days</option>
-                        <option value="30days">Last 30 Days</option>
-                        <option value="custom">Custom Date Range</option>
-                      </select>
-                    </div>
-
-                    {/* Filter by Telecaller staff */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Filter by Telecaller</label>
-                      <select
-                        value={reportTelecallerFilter}
-                        onChange={(e) => setReportTelecallerFilter(e.target.value)}
-                        className="w-full text-xs bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-violet-500 rounded-xl px-3 py-2.5 outline-none text-slate-205 cursor-pointer transition-all duration-200"
-                      >
-                        <option value="ALL">All Telecaller Staff</option>
-                        {telecallers.map(caller => (
-                          <option key={caller.uid} value={caller.uid}>
-                            👤 {caller.name} {caller.active ? '' : '(Inactive)'}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Filter by Audience labels */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Filter by Lead Label</label>
-                      <select
-                        value={reportLabelFilter}
-                        onChange={(e) => setReportLabelFilter(e.target.value)}
-                        className="w-full text-xs bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-violet-500 rounded-xl px-3 py-2.5 outline-none text-slate-205 cursor-pointer transition-all duration-200"
-                      >
-                        <option value="ALL">All Audience Labels</option>
-                        {uniqueLabelsList.map(lbl => (
-                          <option key={lbl} value={lbl}>
-                            🏷️ {lbl}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Filter by Call Status */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Filter by Call Status</label>
-                      <select
-                        value={reportStatusFilter}
-                        onChange={(e) => setReportStatusFilter(e.target.value)}
-                        className="w-full text-xs bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-violet-500 rounded-xl px-3 py-2.5 outline-none text-slate-205 cursor-pointer transition-all duration-200"
-                      >
-                        <option value="ALL">All Call Statuses</option>
-                        <option value="New">New / Uncalled</option>
-                        <option value="Warm">Warm / Follow-up</option>
-                        <option value="Converted">Converted Deals</option>
-                        <option value="Not Interested">Not Interested</option>
-                        <option value="Busy">Busy / Cut Call</option>
-                        <option value="Ringing">Ringing / No Answer</option>
-                        <option value="Cold">Cold / Wrong Number</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Custom Dates Inputs */}
-                  {reportDateRange === 'custom' && (
-                    <div className="grid grid-cols-2 gap-4 max-w-md pt-2 animate-in slide-in-from-top duration-200">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Start Date</label>
-                        <input
-                          type="date"
-                          value={reportCustomStartDate}
-                          onChange={(e) => setReportCustomStartDate(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-202 outline-none focus:border-violet-500"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">End Date</label>
-                        <input
-                          type="date"
-                          value={reportCustomEndDate}
-                          onChange={(e) => setReportCustomEndDate(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-202 outline-none focus:border-violet-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* KPI Cards Grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                  {[
-                    { label: 'Leads Volume', count: totalLeadsVolume, desc: 'Targeted database', color: 'text-violet-400', bg: 'bg-violet-500/5 border-violet-500/10', icon: FileSpreadsheet },
-                    { label: 'Completed Calls', count: callsCompleted, desc: 'Connected logs', color: 'text-cyan-400', bg: 'bg-cyan-500/5 border-cyan-500/10', icon: PhoneCall },
-                    { label: 'Closed Conversions', count: convertedDeals, desc: 'Sales closed successfully', color: 'text-emerald-400', bg: 'bg-emerald-500/5 border-emerald-500/10', icon: Trophy },
-                    { label: 'Avg Call Duration', count: `${avgCallDuration}s`, desc: 'Average talktime rate', color: 'text-sky-400', bg: 'bg-sky-500/5 border-sky-500/10', icon: Clock },
-                    { label: 'Conversion Rate', count: `${conversionRate}%`, desc: 'Success / Volume ratio', color: 'text-amber-400', bg: 'bg-amber-500/5 border-amber-500/10', icon: TrendingUp }
-                  ].map((stat, i) => {
-                    const Icon = stat.icon;
-                    return (
-                      <div key={i} className={`p-5 rounded-2xl border ${stat.bg} shadow-md flex items-center justify-between group hover:scale-[1.02] hover:border-slate-700/80 transition-all duration-300`}>
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{stat.label}</p>
-                          <p className={`text-2xl font-black mt-2 ${stat.color}`}>{stat.count}</p>
-                          <p className="text-[9px] text-slate-500 mt-1">{stat.desc}</p>
-                        </div>
-                        <div className={`p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 ${stat.color} group-hover:bg-slate-800/60 transition shrink-0`}>
-                          <Icon size={16} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Visual Panels Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Status distribution funnel */}
-                  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4 shadow-md group hover:border-slate-700/80 transition-all duration-300">
-                    <div>
-                      <h3 className="text-sm font-bold flex items-center gap-2 text-slate-200">
-                        <BarChart3 className="text-violet-400" size={16} />
-                        <span>Filter-specific Funnel</span>
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Pipeline status values matching selected filters</p>
-                    </div>
-
-                    <div className="space-y-3.5 pt-2 flex-1 flex flex-col justify-center">
-                      {statusStats.map(({ status, barBg, border, text, count, pct }) => (
-                        <div key={status} className="space-y-1">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-350 font-medium">{status}</span>
-                            <span className="text-slate-500 text-[10px]">{count} leads <span className={`ml-1 font-bold ${text}`}>({pct}%)</span></span>
-                          </div>
-                          <div className={`h-2 w-full rounded-full ${barBg} border ${border} overflow-hidden`}>
-                            <div className={`h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500`} style={{ width: `${pct}%` }}></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Daily calling activity chart timeline */}
-                  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4 lg:col-span-2 shadow-md group hover:border-slate-700/80 transition-all duration-300">
-                    <div>
-                      <h3 className="text-sm font-bold flex items-center gap-2 text-slate-200">
-                        <Activity className="text-cyan-400" size={16} />
-                        <span>Daily Call Activity Timeline</span>
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Displays call volume density over the latest 10 active dates</p>
-                    </div>
-
-                    <div className="pt-2 space-y-3">
-                      {sortedDates.length === 0 ? (
-                        <div className="h-48 flex flex-col justify-center items-center text-slate-505 border border-dashed border-slate-800 rounded-xl">
-                          <p className="text-xs">No calling logs match this selection filter.</p>
-                          <p className="text-[10px] text-slate-650 mt-1">Make another filter selection to display timeline.</p>
-                        </div>
-                      ) : (
-                        sortedDates.map(dt => {
-                          const count = activityByDate[dt];
-                          const scalePct = Math.min(Math.round((count / 30) * 100), 100);
-                          return (
-                            <div key={dt} className="flex items-center gap-4 text-xs">
-                              <span className="w-24 shrink-0 font-mono text-slate-400 font-bold">{new Date(dt).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</span>
-                              <div className="flex-1 h-7 bg-slate-950/60 rounded-xl overflow-hidden border border-slate-850 flex items-center pr-3">
-                                <div className="h-full bg-gradient-to-r from-cyan-600 to-violet-650 rounded-l-xl transition-all duration-500 flex items-center pl-3" style={{ width: `${scalePct || 5}%` }}>
-                                  {scalePct > 15 && <span className="text-[9px] font-bold text-white whitespace-nowrap">{count} calls</span>}
-                                </div>
-                                {scalePct <= 15 && <span className="text-[9px] font-bold text-slate-400 ml-2 whitespace-nowrap">{count} calls</span>}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Daily Activity Performance Log & Upcoming Callbacks Agenda */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Daily Activity Performance Log Table */}
-                  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl lg:col-span-2 space-y-4 shadow-md group hover:border-slate-700/80 transition-all duration-300">
-                    <div>
-                      <h3 className="text-sm font-bold flex items-center gap-2 text-slate-200">
-                        <Activity className="text-violet-400" size={16} />
-                        <span>Daily Activity Performance Log</span>
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Granular day-by-day analysis of call volumes, unique leads, agent coverage, and conversions</p>
-                    </div>
-
-                    <div className="overflow-x-auto border border-slate-800/80 rounded-xl bg-slate-950/40">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold tracking-wider bg-slate-950/80">
-                            <th className="p-3">Date</th>
-                            <th className="p-3 text-center">Calls</th>
-                            <th className="p-3 text-center">Unique Leads</th>
-                            <th className="p-3 text-center">Conversions</th>
-                            <th className="p-3 text-center">Reminders</th>
-                            <th className="p-3 text-center">Agents</th>
-                            <th className="p-3 text-right">Avg Talktime</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-900">
-                          {sortedPerformanceDates.length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="p-6 text-center text-slate-500">
-                                No activity log records for the selected filters.
-                              </td>
-                            </tr>
-                          ) : (
-                            sortedPerformanceDates.slice(0, 10).map(dt => {
-                              const day = dailyPerformance[dt];
-                              const avgSec = day.calls > 0 ? Math.round(day.totalDuration / day.calls) : 0;
-                              return (
-                                <tr key={dt} className="hover:bg-slate-900/20 transition text-slate-300">
-                                  <td className="p-3 font-mono font-semibold text-slate-200">
-                                    {new Date(dt + 'T00:00:00').toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}
-                                  </td>
-                                  <td className="p-3 text-center font-mono font-bold text-cyan-400">{day.calls}</td>
-                                  <td className="p-3 text-center font-mono text-slate-400">{day.leadsCalled.size}</td>
-                                  <td className="p-3 text-center font-mono text-emerald-400">+{day.conversions}</td>
-                                  <td className="p-3 text-center font-mono text-amber-400">{day.callbacks}</td>
-                                  <td className="p-3 text-center font-mono text-violet-400">{day.callers.size}</td>
-                                  <td className="p-3 text-right font-mono font-semibold text-slate-400">{avgSec}s</td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Upcoming Callbacks Agenda */}
-                  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4 shadow-md group hover:border-slate-700/80 transition-all duration-300 flex flex-col">
-                    <div>
-                      <h3 className="text-sm font-bold flex items-center gap-2 text-slate-200">
-                        <Calendar className="text-amber-400" size={16} />
-                        <span>Upcoming Callbacks Agenda</span>
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Chronological calendar of future Warm follow-up calls</p>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto max-h-[320px] space-y-4 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
-                      {sortedFollowupDates.length === 0 ? (
-                        <div className="h-full min-h-[180px] flex flex-col justify-center items-center text-slate-550 border border-dashed border-slate-800 rounded-xl p-4">
-                          <Calendar size={24} className="text-slate-700 mb-2" />
-                          <p className="text-xs">No upcoming followups scheduled.</p>
-                          <p className="text-[10px] text-slate-600 text-center mt-1">Telecallers will see client-requested callback dates here once they set reminder dates.</p>
-                        </div>
-                      ) : (
-                        sortedFollowupDates.map(dt => {
-                          const group = upcomingFollowups[dt];
-                          return (
-                            <div key={dt} className="space-y-2 border-l-2 border-amber-500/30 pl-3">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-black text-amber-500 uppercase tracking-wider">
-                                  {new Date(dt + 'T00:00:00').toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}
-                                </span>
-                                <span className="text-[9px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-bold">
-                                  {group.leads.length} calls
-                                </span>
-                              </div>
-                              <div className="space-y-1.5">
-                                {group.leads.map(lead => {
-                                  const caller = telecallers.find(t => t.uid === lead.assignedTo);
-                                  return (
-                                    <div key={lead.id} className="p-2 bg-slate-950/60 rounded-lg border border-slate-850 hover:border-slate-800 transition text-[11px] space-y-1">
-                                      <div className="flex justify-between items-start">
-                                        <span className="font-bold text-slate-200">{lead.name}</span>
-                                        <span className="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-slate-400">{lead.label || 'General'}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1 text-[9px] text-slate-500">
-                                        <PhoneCall size={10} className="shrink-0" />
-                                        <span>{lead.phone}</span>
-                                        <span className="text-slate-700">•</span>
-                                        <Users size={10} className="shrink-0" />
-                                        <span className="truncate">{caller?.name || 'Unassigned'}</span>
-                                      </div>
-                                      {lead.notes && (
-                                        <p className="text-[10px] text-slate-400 italic line-clamp-1 border-t border-slate-900 pt-1 mt-1">
-                                          "{lead.notes}"
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Telecaller Performance Leaderboard Table */}
-                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden shadow-lg shadow-slate-950/20 group hover:border-slate-700/80 transition-all duration-300">
-                  <div className="px-6 py-5 border-b border-slate-800/80 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-md flex items-center gap-2">
-                        <Award className="text-amber-400" size={18} />
-                        <span>Staff Roster Performance Leaderboard</span>
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1">Compare caller workloads, closed conversions, conversion rates, and call durations.</p>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold tracking-wider bg-slate-950/40">
-                          <th className="p-4 w-12 text-center">Rank</th>
-                          <th className="p-4">Telecaller</th>
-                          <th className="p-4 text-center">Allocated Workload</th>
-                          <th className="p-4 text-center">Completed Calls</th>
-                          <th className="p-4 text-center">Closed Deals</th>
-                          <th className="p-4 text-center">Success Ratio</th>
-                          <th className="p-4 text-center">Avg Talktime</th>
-                          <th className="p-4 text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60">
-                        {telecallerReportList.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="p-8 text-center text-slate-500">
-                              No telecaller staff available for analytics.
-                            </td>
-                          </tr>
-                        ) : (
-                          telecallerReportList.map((item, idx) => {
-                            const medals = ['🥇', '🥈', '🥉', '👤'];
-                            const medal = idx < 3 ? medals[idx] : medals[3];
-                            return (
-                              <tr key={item.uid} className="hover:bg-slate-950/30 transition border-b border-slate-850/50">
-                                <td className="p-4 text-center text-sm font-bold font-mono">
-                                  {idx + 1}
-                                </td>
-                                <td className="p-4 font-bold text-slate-200 flex items-center gap-2">
-                                  <span className="text-md shrink-0">{medal}</span>
-                                  <span>{item.name}</span>
-                                </td>
-                                <td className="p-4 text-center font-mono font-semibold text-slate-350">{item.workload} leads</td>
-                                <td className="p-4 text-center font-mono font-semibold text-cyan-400">{item.callsDone} interactions</td>
-                                <td className="p-4 text-center font-mono font-semibold text-emerald-400">+{item.converted} conversions</td>
-                                <td className="p-4 text-center font-mono">
-                                  <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] ${
-                                    item.conversionRate >= 40 ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/20' :
-                                    item.conversionRate >= 15 ? 'bg-amber-500/10 text-amber-450 border border-amber-500/20' :
-                                    'bg-slate-800 text-slate-400'
-                                  }`}>
-                                    {item.conversionRate}% Success
-                                  </span>
-                                </td>
-                                <td className="p-4 text-center font-mono text-slate-400 font-semibold">{item.avgDuration}s / call</td>
-                                <td className="p-4 text-right">
-                                  <span className={`px-2.5 py-1 rounded-full font-extrabold text-[9px] uppercase border flex items-center gap-1.5 w-fit ml-auto ${
-                                    item.active 
-                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-450' 
-                                      : 'bg-slate-950 border-slate-900 text-slate-650'
-                                  }`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${item.active ? 'bg-emerald-400 animate-pulse' : 'bg-slate-650'}`}></span>
-                                    <span>{item.active ? 'Active' : 'Off-duty'}</span>
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* 🔍 Matched Leads Explorer Collapsible Grid Section */}
-                <div className="space-y-4 pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-200">Matched Lead Records Explorer</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Explore individual records matching the chosen date range, telecaller and label filters</p>
-                    </div>
-                    <button
-                      onClick={() => setShowReportRecords(!showReportRecords)}
-                      className={`py-2 px-4 font-bold rounded-xl text-xs transition duration-200 flex items-center gap-2 border ${
-                        showReportRecords
-                          ? 'bg-violet-950/40 border-violet-800 text-violet-300 hover:bg-violet-900/40'
-                          : 'bg-violet-600 hover:bg-violet-500 border-transparent text-white shadow-lg shadow-violet-950/30'
-                      }`}
-                    >
-                      <span>{showReportRecords ? '🙈 Hide Records' : `🔍 View Matched Records (${filteredReportLeads.length})`}</span>
-                    </button>
-                  </div>
-
-                  {showReportRecords && (
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top duration-300 shadow-xl shadow-slate-950/20">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold tracking-wider bg-slate-950/40">
-                              <th className="p-4">Name</th>
-                              <th className="p-4">Phone</th>
-                              <th className="p-4">Source</th>
-                              <th className="p-4">Label</th>
-                              <th className="p-4">Assigned To</th>
-                              <th className="p-4">Status</th>
-                              <th className="p-4">Last Note</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/60">
-                            {filteredReportLeads.length === 0 ? (
-                              <tr>
-                                <td colSpan={7} className="p-8 text-center text-slate-500">
-                                  No lead records match the selected interactive filters.
-                                </td>
-                              </tr>
-                            ) : (
-                              filteredReportLeads.map((lead) => {
-                                const assignedCaller = telecallers.find(t => t.uid === lead.assignedTo);
-                                
-                                // Source Tag Styling logic
-                                const getSourceTagStyles = (sourceStr: string) => {
-                                  const s = (sourceStr || '').toLowerCase();
-                                  if (s === 'fb' || s === 'facebook') {
-                                    return 'bg-indigo-950/40 border-indigo-900/30 text-indigo-400';
-                                  }
-                                  if (s === 'ig' || s === 'instagram') {
-                                    return 'bg-pink-950/40 border-pink-900/30 text-pink-400';
-                                  }
-                                  if (s.includes('google')) {
-                                    return 'bg-cyan-950/40 border-cyan-900/30 text-cyan-400';
-                                  }
-                                  if (s.includes('web')) {
-                                    return 'bg-teal-950/40 border-teal-900/30 text-teal-400';
-                                  }
-                                  return 'bg-slate-850 border-slate-800 text-slate-400';
-                                };
-
-                                return (
-                                  <tr key={lead.id} className="hover:bg-slate-950/30 transition border-b border-slate-850/50">
-                                    <td className="p-4 font-bold text-slate-205">{lead.name}</td>
-                                    <td className="p-4 font-mono text-slate-400">{lead.phone}</td>
-                                    <td className="p-4">
-                                      <span className={`px-2.5 py-1 rounded-lg font-medium border text-[10px] ${getSourceTagStyles(lead.source)}`}>
-                                        {lead.source}
-                                      </span>
-                                    </td>
-                                    <td className="p-4">
-                                      <span className="px-2.5 py-1 bg-violet-950/45 border border-violet-850/30 rounded-lg text-violet-300 font-bold text-[10px] flex items-center gap-1.5 w-fit">
-                                        🏷️ {lead.label || 'General'}
-                                      </span>
-                                    </td>
-                                    <td className="p-4 text-slate-350">
-                                      {assignedCaller ? (
-                                        <span className="font-semibold text-violet-400">👤 {assignedCaller.name}</span>
-                                      ) : (
-                                        <span className="text-slate-500 italic">Unassigned</span>
-                                      )}
-                                    </td>
-                                    <td className="p-4">
-                                      <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${
-                                        lead.status === 'Converted' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                                        lead.status === 'Warm' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-                                        lead.status === 'Not Interested' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-                                        'bg-sky-500/10 border-sky-500/20 text-sky-400'
-                                      }`}>
-                                        {lead.status}
-                                      </span>
-                                    </td>
-                                    <td className="p-4 text-slate-400 max-w-xs truncate" title={lead.notes}>
-                                      {lead.notes || '—'}
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+          {activeTab === 'reports' && (
+            <ReportsTab leads={leads} telecallers={telecallers} />
+          )}
                       
         </main>
       </div>

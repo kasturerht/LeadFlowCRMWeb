@@ -215,7 +215,10 @@ export function subscribeToLeads(callback: (leads: Lead[]) => void, filterUid?: 
         updatedAt: data.updatedAt || '',
         archived: data.archived === true,
         batchId: data.batchId || '',
-        uploadedAt: data.uploadedAt || ''
+        uploadedAt: data.uploadedAt || '',
+        followUpDate: data.followUpDate || null,
+        visited: data.visited === true,
+        attemptCount: Number(data.attemptCount) || 0
       });
     });
     callback(list);
@@ -242,28 +245,7 @@ export function subscribeToTelecallers(callback: (callers: UserProfile[]) => voi
   });
 }
 
-export function subscribeToAllInteractions(callback: (interactions: Interaction[]) => void) {
-  // Ordered by timestamp descending (up to 100 entries)
-  const q = query(collection(db, "interactions"), orderBy("timestamp", "desc"), limit(100));
-  return onSnapshot(q, (snapshot) => {
-    const list: Interaction[] = [];
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data();
-      list.push({
-        id: docSnap.id,
-        leadId: data.leadId || '',
-        callerId: data.callerId || '',
-        callerName: data.callerName || '',
-        statusBefore: data.statusBefore || '',
-        statusAfter: data.statusAfter || '',
-        notes: data.notes || '',
-        timestamp: data.timestamp || '',
-        duration: data.duration || 0
-      });
-    });
-    callback(list);
-  });
-}
+
 
 export function subscribeToAuditLogs(callback: (logs: AuditLog[]) => void) {
   const q = query(collection(db, "auditLogs"), orderBy("timestamp", "desc"), limit(50));
@@ -424,6 +406,65 @@ export async function rollbackUploadBatch(
     adminUserName
   );
 }
+
+// --------------------------------------------------------------------------
+// UTILITIES FOR REPORTS
+// --------------------------------------------------------------------------
+
+/**
+ * Android App Parity Logic for Lead Category
+ */
+export function getPrimaryCategory(lead: Lead): string {
+  if (lead.archived) return "ARCHIVED";
+  if (lead.status === "Converted") return "CONVERTED";
+  if (lead.status === "Not Interested" || lead.status === "Invalid" || (lead.status && lead.status.includes("(3+ Attempts)"))) return "REJECTED";
+  if (lead.status === "Visited" || lead.visited) return "VISITED";
+  if (lead.status === "Visit Scheduled") return "VISIT_SCHEDULED";
+  if (lead.status === "Follow-up") return "FOLLOWUP";
+  if (lead.status === "No Answer" || lead.status === "Busy" || lead.status === "Warm Lead" || lead.status === "Ringing") return "ATTEMPTED";
+  return "PENDING";
+}
+
+/**
+ * Fetch interactions securely with limits/bounds for scalable analytics
+ */
+export async function fetchInteractionsByDateRange(startDateStr: string, endDateStr: string): Promise<Interaction[]> {
+  try {
+    let q = query(
+      collection(db, "interactions"),
+      where("timestamp", ">=", startDateStr),
+      where("timestamp", "<=", endDateStr)
+    );
+
+    // Removed telecallerId filter from Firestore query to bypass composite index limits.
+    // Filtering by telecallerId is now handled entirely on the client side.
+
+    const snapshot = await getDocs(q);
+    const list: Interaction[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        leadId: data.leadId || '',
+        callerId: data.callerId || '',
+        callerName: data.callerName || '',
+        statusBefore: data.statusBefore || '',
+        statusAfter: data.statusAfter || '',
+        notes: data.notes || '',
+        timestamp: data.timestamp || '',
+        duration: data.duration || 0,
+        followUpDate: data.followUpDate || null,
+        isVisitLog: data.isVisitLog || false,
+        isManualDuration: data.isManualDuration === true
+      });
+    });
+    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  } catch (err) {
+    console.error("Error fetching date range interactions", err);
+    return [];
+  }
+}
+
 
 
 
